@@ -1,46 +1,42 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# TITLE:
-# AUTHOR(S): Sebastian Kiehlmann (skiehlmann@mpifr-bonn.mpg.de)
-# COPYRIGHT:
-# DATE: 2015 February 05th
-# VERSION: 3.2
-# PYTHON VERSION: 2.7.2
-# DESCRIPTION:
-# -----------------------------------------------------------------------------
-# UPDATES/FIXES:
-# -v3.3: included binning option for time bined light curves:
-#        - new function rebin()
-#        - rebinning option in create_psd_db() and run_sim()
-# -----------------------------------------------------------------------------
-# CLASSES IN THIS FILE:
-# -
-# FUNCTIONS IN THIS FILE:
-# -
-# -----------------------------------------------------------------------------
 
-__version__ = '3.3'
+"""Script for estimating the power spectral density (PSD) of a blazar light
+curve.
+"""
 
-import os.path
-import sys
 from datetime import datetime
 from math import ceil, floor, log10, sqrt
-from statsmodels.distributions import ECDF
+import os.path
+import sys
 
 import numpy as np
 from scipy.signal import periodogram
 from scipy.interpolate import splrep, splev
 from scipy.stats import kstest
+from statsmodels.distributions import ECDF
 from matplotlib import pyplot as plt
 from matplotlib import cm
 import matplotlib.gridspec as gs
 import tables as tb
 
-cmap = cm.Spectral
-
 import warnings
 warnings.simplefilter('ignore', np.RankWarning)
 
+__author__ = "Sebastian Kiehlmann"
+__copyright__ = "Copyright 2023, Sebastian Kiehlmann"
+__credits__ = ["Sebastian Kiehlmann"]
+__license__ = "BSD 3"
+__version__ = "4.0"
+__maintainer__ = "Sebastian Kiehlmann"
+__email__ = "skiehlmann@mail.de"
+__status__ = "Production"
+
+#==============================================================================
+# Matplotlib configuration
+#==============================================================================
+
+cmap = cm.Spectral
 plt.rcParams.update({'axes.labelsize': 16.,
                      'axes.titlesize': 16.,
                      'figure.figsize': [12, 7.5],
@@ -52,9 +48,9 @@ plt.rcParams.update({'axes.labelsize': 16.,
                      'xtick.labelsize': 14.,
                      'ytick.labelsize': 14.})
 
-
-###############################################################################
-
+#==============================================================================
+# FUNCTIONS
+#==============================================================================
 
 def create_file_dir(filename):
     """
@@ -87,9 +83,7 @@ def create_file_dir(filename):
     if not os.path.exists(path):
         os.makedirs(path)
 
-
-###############################################################################
-
+#==============================================================================
 
 def powerlaw(frequencies, index=1., amplitude=10., frequency=0.1):
     """Returns an array of amplitudes following a power-law over the input
@@ -112,12 +106,9 @@ def powerlaw(frequencies, index=1., amplitude=10., frequency=0.1):
         Array of same length as input 'frequencies'.
     """
 
-    return amplitude *np.power(frequencies /frequency, -index)
+    return amplitude * np.power(frequencies / frequency, -index)
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def kneemodel(frequencies, index=1., amplitude=10., frequency=0.1):
     """Returns an array of amplitudes following a constant profile that changes
@@ -141,13 +132,10 @@ def kneemodel(frequencies, index=1., amplitude=10., frequency=0.1):
         Array of same length as input 'frequencies'.
     """
 
-    return amplitude *np.power(1 +np.power(frequencies /frequency, 2),
-                               -index /2.)
+    return amplitude * np.power(
+            1 + np.power(frequencies / frequency, 2), -index / 2.)
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def brokenpowerlaw(
         frequencies, index_lo=1., index_hi=2., amplitude=10., frequency=0.1):
@@ -171,14 +159,12 @@ def brokenpowerlaw(
         Array of same length as input 'frequencies'.
     """
 
-    return np.where(frequencies>frequency,
-                    amplitude *np.power(frequencies /frequency, -index_hi),
-                    amplitude *np.power(frequencies /frequency, -index_lo))
+    return np.where(
+            frequencies>frequency,
+            amplitude * np.power(frequencies / frequency, -index_hi),
+            amplitude * np.power(frequencies / frequency, -index_lo))
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def sampling(time, average='median', factor=0.1):
     """Prints out the total time and the min, max, median and mean sampling
@@ -200,49 +186,55 @@ def sampling(time, average='median', factor=0.1):
         Total time and suggested sampling rate (upper limit).
     """
 
-    total_time = time[-1] -time[0]
-    deltat =time[1:] -time[:-1]
+    total_time = time[-1] - time[0]
+    deltat =time[1:] - time[:-1]
     sampling_median = np.median(deltat)
     sampling_mean = np.mean(deltat)
     sampling_min = np.min(deltat)
     sampling_max = np.max(deltat)
 
     if average=='median':
-        sampling_sim = sampling_median *factor
+        sampling_sim = sampling_median * factor
     elif average=='mean':
-        sampling_sim = sampling_mean *factor
+        sampling_sim = sampling_mean * factor
 
-    print 'Total time:      %.3f' % total_time
-    print 'Min. sampling:   %.3f' % sampling_min
-    print 'Max. sampling:   %.3f' % sampling_max
-    print 'Mean sampling:   %.3f' % sampling_mean
-    print 'Median sampling: %.3f' % sampling_median
-    print 'Suggested simulation sampling: <%.3f' % sampling_sim
+    print(f'Total time:      {total_time:.3f}')
+    print(f'Min. sampling:   {sampling_min:.3f}')
+    print(f'Max. sampling:   {sampling_max:.3f}')
+    print(f'Mean sampling:   {sampling_mean:.3f}')
+    print(f'Median sampling: {sampling_median:.3f}')
+    print(f'Suggested simulation sampling: <{sampling_sim:.3f}')
 
     return total_time, sampling_sim
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def create_timesteps(time, sampling):
-    """TODO
+    """Create equally sampled time steps.
+
+    Parameters
+    ----------
+    time : float
+        Total time.
+    sampling : float
+        Time interval between adjacent time steps.
+
+    Returns
+    -------
+    np.ndarray
+        Time steps.
     """
 
     # get number of data points and adjust total time:
-    N = int(ceil(time /sampling)) +1
-    time = sampling *(N-1)
+    N = int(ceil(time / sampling)) + 1
+    time = sampling * (N - 1)
 
     return np.linspace(0, time, N)
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def simulate_lightcurve_tk(time, sampling, spec_shape, spec_args, seed=False):
-    """Returns an equally sampled, simulated random light curve following a
+    """Create an equally sampled, simulated random light curve following a
     noise process given a spectral shape of the power density spectrum.
 
     Parameters
@@ -262,17 +254,20 @@ def simulate_lightcurve_tk(time, sampling, spec_shape, spec_args, seed=False):
 
     Returns
     -----
-    out : structured 2darray
-        Structured array indexed by 'time' and 'flux', containing the time
-        steps and the intensity profile (in arbitray units), respectively.
+    out : np.ndarray
+        The simulated red noise light curve.
+
+    Notes
+    -----
+    This is an implemention of the algorithm described in [1].
 
     References
     -----
-    Timmer and Koenig, 1995, 'On generating power law noise', A&A, 300, 707
+    [1] Timmer and Koenig, 1995, 'On generating power law noise', A&A, 300, 707
     """
 
     # get number of data points and adjust total time:
-    N = int(ceil(time /sampling)) +1
+    N = int(ceil(time / sampling)) + 1
 
     # set spectrum:
     freq = np.fft.rfftfreq(N, sampling)
@@ -285,64 +280,117 @@ def simulate_lightcurve_tk(time, sampling, spec_shape, spec_args, seed=False):
     if seed:
         np.random.seed(seed)
     coef = np.random.normal(size=(2, spectrum.shape[0]))
+
     # if N is even the Nyquist frequency is real:
     if N%2==0:
         coef[-1,1] = 0.
-    coef = coef[0] +1j *coef[1]
-    coef *= np.sqrt(0.5 *spectrum *N /sampling)
+    coef = coef[0] +1j * coef[1]
+    coef *= np.sqrt(0.5 *spectrum * N / sampling)
 
     # inverse Fourier transform:
     lightcurve = np.fft.irfft(coef, N)
 
     return lightcurve
 
+#==============================================================================
 
+def simulate_lightcurves_tk(
+        time, sampling, spec_shape, spec_args, nlcs=1, seed=False):
+    """Simulate multiple light curves with the T&K algorithm.
 
-###############################################################################
+    Parameters
+    ----------
+    time : float
+        Length of the simulation in arbitrary time unit.
+    sampling : float
+        Length of the sampling interval in same unit as 'time'.
+    spec_shape : func
+        Function that takes an array of frequencies and 'spec_args' as input
+        and calculates a spectrum for those frequencies.
+    spec_args : list
+        Function arguments to 'spec_shape'.
+    nlcs : int, default:1
+        Number of light curves to be simulated.
+    seed : bool, default:False
+        Sets a seed for the random generator to get a reproducable result.
+        For testing only.
 
+    Returns
+    -------
+    lightcurves : np.ndarray
+        Two dimensional array of simulated red noise light curves. Each row
+        along the first dimension contains one light curve.
 
-def simulate_lightcurves_tk(time, sampling, spec_shape, spec_args, nlcs=1,
-                            seed=False):
-    """TODO
+    Notes
+    -----
+    The light curves will be initially created as one long light curve and then
+    are split into seperate light curves. Therefore, 'nlcs' does not only
+    control the number of final light curves. It also affects to what extend
+    lower power frequencies are included in the final light curves, which is
+    relevant for taking rednoise leakage into account in the PSD estimation.
+    A value of nlcs=10 is recommendable.
     """
 
     # get number of data points per light curve:
-    N = int(ceil(time /sampling)) +1
+    N = int(ceil(time / sampling)) + 1
 
     # simulate long lightcurve:
-    lightcurves = simulate_lightcurve_tk(sampling*N*nlcs, sampling, spec_shape,
-                                         spec_args, seed=seed)[:-1]
+    lightcurves = simulate_lightcurve_tk(
+            sampling*N*nlcs, sampling, spec_shape, spec_args, seed=seed)[:-1]
 
     # reshape to short light curves and normalize each to zero mean:
 
     if nlcs>1:
         shape = (nlcs, N)
         lightcurves = lightcurves[:N*nlcs].reshape(shape)
-        lightcurves -= np.repeat(np.mean(lightcurves, axis=1),
-                                 shape[1]).reshape(shape)
+        lightcurves -= np.repeat(
+                np.mean(lightcurves, axis=1), shape[1]).reshape(shape)
 
     return lightcurves
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def adjust_lightcurve_pdf(lightcurve, ecdf, iterations=100, feedback=False):
-    """TODO
+    """Interatively adjust a simulated red noise light curve to match a target
+    probability density function (PDF).
+
+    Parameters
+    ----------
+    lightcurve : np.ndarray
+        The input light curve to adjust.
+    ecdf : statsmodels.distributions.ECDF
+        Target ECDF as an empirical description of the target PDF.
+    iterations : int, default: 100
+        Number of iterations.
+    feedback : bool, default: False
+        Print out information if True.
+
+    Returns
+    -------
+    lc_sim : np.ndarray
+        The adjusted simulated light curve.
+
+    Notes
+    -----
+    This is an implemention of the algorithm described in [1].
+
+    References
+    -----
+    [1] Emmanoulopoulos et al., 2013, 'Generating artificial light curves:
+        revisited and updated', MNRAS, 433, 2, 907
     """
 
     # calculate discrete Fourier transform:
     dft_norm = np.fft.rfft(lightcurve)
 
-    #---Emmanoulopoulos-et-al-algorithm--------------------------------------------
+    #---Emmanoulopoulos-et-al-algorithm----------------------------------------
     # calculate amplitudes based on the random Fourier coefficients:
     N = len(lightcurve)
     ampl_adj = np.absolute(dft_norm)
 
     # create artificial light curve based on ECDF:
-    lc_sim = np.interp(np.random.uniform(ecdf.y[1], 1., size=N),
-                       ecdf.y, ecdf.x)
+    lc_sim = np.interp(
+            np.random.uniform(ecdf.y[1], 1., size=N), ecdf.y, ecdf.x)
 
     # iteration:
     for i in range(iterations):
@@ -351,7 +399,7 @@ def adjust_lightcurve_pdf(lightcurve, ecdf, iterations=100, feedback=False):
         ampl_sim = np.absolute(dft_sim)
 
         # spectral adjustment:
-        dft_adj = dft_sim /ampl_sim *ampl_adj
+        dft_adj = dft_sim / ampl_sim * ampl_adj
         lc_adj = np.fft.irfft(dft_adj, n=N)
 
         # amplitude adjustment:
@@ -359,26 +407,59 @@ def adjust_lightcurve_pdf(lightcurve, ecdf, iterations=100, feedback=False):
         s = np.argsort(lc_sim)
         lc_adj[a] = lc_sim[s]
 
-        if np.max(np.absolute(lc_adj -lc_sim) /lc_sim) < 0.01:
+        if np.max(np.absolute(lc_adj - lc_sim) / lc_sim) < 0.01:
             if feedback:
-                print 'Convergence reached after %i iterations.' % (i+1)
+                print(f'Convergence reached after {i+1} iterations.')
             break
         else:
             lc_sim = lc_adj
     else:
         if feedback:
-            print 'No convergence reached within %i iterations.' % iterations
+            print(f'No convergence reached within {iterations} iterations.')
 
     return lc_sim
 
+#==============================================================================
 
+def simulate_lightcurve_emp(
+        time, sampling, spec_shape, spec_args, ecdf, iterations=100,
+        seed=False):
+    """Create an equally sampled, simulated random light curve following a
+    noise process given a spectral shape of the power density spectrum and
+    a target probability density function expressed by an ECDF.
 
-###############################################################################
+    Parameters
+    -----
+    time : float
+        Length of the simulation in arbitrary time unit.
+    sampling : float
+        Length of the sampling interval in same unit as 'time'.
+    spec_shape : func
+        Function that takes an array of frequencies and 'spec_args' as input
+        and calculates a spectrum for those frequencies.
+    spec_args : list
+        Function arguments to 'spec_shape'
+    ecdf : statsmodels.distributions.ECDF
+        Target ECDF as an empirical description of the target PDF.
+    iterations : int, default: 100
+        Number of iterations for the Emmanoulopoulos et al. algorithm.
+    seed : bool, default: False
+        Sets a seed for the random generator to get a reproducable result.
+        For testing only.
 
+    Returns
+    -------
+    lc_sim : np.ndarray
+        The simulated light curve following a target PSD and PDF.
 
-def simulate_lightcurve_emp(time, sampling, spec_shape, spec_args, ecdf,
-                            iterations=100, seed=False):
-    """TODO
+    Notes
+    -----
+    This is an implemention of the algorithm described in [1].
+
+    References
+    -----
+    [1] Emmanoulopoulos et al., 2013, 'Generating artificial light curves:
+        revisited and updated', MNRAS, 433, 2, 907
     """
 
     #---check input and set arguments for spectral shape functions-------------
@@ -386,8 +467,8 @@ def simulate_lightcurve_emp(time, sampling, spec_shape, spec_args, ecdf,
         try:
             float(spec_args)
         except:
-            print "Input error: When spec_shape is 'powerlaw', spec_args " \
-                  "needs to be a float (spectral index)!"
+            print("Input error: When spec_shape is 'powerlaw', spec_args " \
+                  "needs to be a float (spectral index)!")
             return False
         spec_args = [spec_args, 10., 0.1]
 
@@ -396,9 +477,9 @@ def simulate_lightcurve_emp(time, sampling, spec_shape, spec_args, ecdf,
             spec_args[0] = float(spec_args[0])
             spec_args[1] = float(spec_args[1])
         except:
-            print "Input error: When spec_shape is 'kneemodel', spec_args " \
+            print("Input error: When spec_shape is 'kneemodel', spec_args " \
                   "needs to be a list or tuple of two floats (spectral index" \
-                  ", knee frequency)!"
+                  ", knee frequency)!")
             return False
         spec_args = [spec_args[0], 10., spec_args[1]]
 
@@ -408,16 +489,17 @@ def simulate_lightcurve_emp(time, sampling, spec_shape, spec_args, ecdf,
             spec_args[1] = float(spec_args[1])
             spec_args[2] = float(spec_args[2])
         except:
-            print "Input error: When spec_shape is 'brokenpowerlaw', " \
+            print("Input error: When spec_shape is 'brokenpowerlaw', " \
                   "spec_args needs to be a list or tuple of three floats " \
-                  "(spectral index low, spectral index high, break frequency)!"
+                  "(spectral index low, spectral index high, break " \
+                  "frequency)!")
             return False
         spec_args = [spec_args[0], spec_args[1], 10., spec_args[2]]
 
     #---Timmer-Koenig-algorithm------------------------------------------------
-    print 'Step 1: TK algorithm'
+    print('Step 1: TK algorithm')
     # get number of data points and adjust total time:
-    N = int(ceil(time /sampling)) +1
+    N = int(ceil(time / sampling)) + 1
 
     # set spectrum:
     freq = np.fft.rfftfreq(N, sampling)
@@ -429,27 +511,30 @@ def simulate_lightcurve_emp(time, sampling, spec_shape, spec_args, ecdf,
     # random (complex) Fourier coefficients for inverse Fourier transform:
     if seed:
         np.random.seed(seed)
+
     dft_norm = np.random.normal(size=(2, spectrum.shape[0]))
+
     # if N is even the Nyquist frequency is real:
-    if N%2==0:
+    if N % 2 == 0:
         dft_norm[-1,1] = 0.
-    dft_norm = dft_norm[0] +1j *dft_norm[1]
-    dft_norm *= np.sqrt(0.5 *spectrum *N /sampling)
+    dft_norm = dft_norm[0] + 1j * dft_norm[1]
+    dft_norm *= np.sqrt(0.5 * spectrum * N / sampling)
 
     #---Emmanoulopoulos-et-al-algorithm----------------------------------------
-    print 'Step 2: ECDF based sim. light curve'
+    print('Step 2: ECDF based sim. light curve')
     # calculate amplitudes based on the random Fourier coefficients:
     ampl_adj = np.absolute(dft_norm)
     del dft_norm
 
     # create artificial light curve based on ECDF:
-    lc_sim = np.interp(np.random.uniform(ecdf.y[1], 1., size=N),
-                       ecdf.y, ecdf.x)
+    lc_sim = np.interp(
+            np.random.uniform(ecdf.y[1], 1., size=N), ecdf.y, ecdf.x)
 
     # iteration:
-    print 'Step 3: iterative spectral and amplitude adjustment...'
+    print('Step 3: iterative spectral and amplitude adjustment...')
     for i in range(iterations):
-        sys.stdout.write('\r        Progress: %i %%' % ((i+1)*100./iterations))
+        sys.stdout.write('\r        Progress: {0:.0f} %'.format(
+                (i+1) * 100. / iterations))
         sys.stdout.flush()
 
         # calculate DFT, amplitudes:
@@ -466,24 +551,66 @@ def simulate_lightcurve_emp(time, sampling, spec_shape, spec_args, ecdf,
         lc_adj[a] = lc_sim[s]
 
         if np.max(np.absolute(lc_adj -lc_sim) /lc_sim) < 0.01:
-            print '\r       Convergence reached after %i iterations.' % (i+1)
+            print(f'\r       Convergence reached after {i+1} iterations.')
             break
         else:
             lc_sim = lc_adj
     else:
-        print '\n        No convergence reached.'
+        print('\n        No convergence reached.')
 
     return lc_sim
 
+#==============================================================================
 
+def simulate_lightcurves_emp(
+        time, sampling, spec_shape, spec_args, ecdf, nlcs=1, adjust_iter=100,
+        feedback=False, seed=False):
+    """Simulate multiple light curves with the Emmanoulpopoulous et al.
+    algorithm.
 
-###############################################################################
+    Parameters
+    ----------
+    time : float
+        Length of the simulation in arbitrary time unit.
+    sampling : float
+        Length of the sampling interval in same unit as 'time'.
+    spec_shape : func
+        Function that takes an array of frequencies and 'spec_args' as input
+        and calculates a spectrum for those frequencies.
+    spec_args : list
+        Function arguments to 'spec_shape'.
+    ecdf : statsmodels.distributions.ECDF
+        Target ECDF as an empirical description of the target PDF.
+    nlcs : int, default: 1
+        Number of light curves to be simulated.
+    adjust_iter : int, default: 100
+        Number of iterations for the Emmanoulopoulos et al. algorithm.
+    feedback : bool, default: False
+        Print out information if True.
+    seed : bool, default:False
+        Sets a seed for the random generator to get a reproducable result.
+        For testing only.
 
+    Returns
+    -------
+    lightcurves : np.ndarray
+        Two dimensional array of simulated red noise light curves. Each row
+        along the first dimension contains one light curve.
 
-def simulate_lightcurves_emp(time, sampling, spec_shape, spec_args, ecdf,
-                             nlcs=1, adjust_iter=100, feedback=False,
-                             seed=False):
-    """TODO
+    Notes
+    -----
+    * This is an implemention of the algorithm described in [1].
+    * The light curves will be initially created as one long light curve and
+      then are split into seperate light curves. Therefore, 'nlcs' does not
+      only control the number of final light curves. It also affects to what
+      extend lower power frequencies are included in the final light curves,
+      which is relevant for taking rednoise leakage into account in the PSD
+      estimation. A value of nlcs=10 is recommendable.
+
+    References
+    -----
+    [1] Emmanoulopoulos et al., 2013, 'Generating artificial light curves:
+        revisited and updated', MNRAS, 433, 2, 907
     """
 
     #---check input and set arguments for spectral shape functions-------------
@@ -491,8 +618,8 @@ def simulate_lightcurves_emp(time, sampling, spec_shape, spec_args, ecdf,
         try:
             float(spec_args)
         except:
-            print "Input error: When spec_shape is 'powerlaw', spec_args " \
-                  "needs to be a float (spectral index)!"
+            print("Input error: When spec_shape is 'powerlaw', spec_args " \
+                  "needs to be a float (spectral index)!")
             return False
         spec_args = [spec_args, 10., 0.1]
 
@@ -501,9 +628,9 @@ def simulate_lightcurves_emp(time, sampling, spec_shape, spec_args, ecdf,
             spec_args[0] = float(spec_args[0])
             spec_args[1] = float(spec_args[1])
         except:
-            print "Input error: When spec_shape is 'kneemodel', spec_args " \
+            print("Input error: When spec_shape is 'kneemodel', spec_args " \
                   "needs to be a list or tuple of two floats (spectral index" \
-                  ", knee frequency)!"
+                  ", knee frequency)!")
             return False
         spec_args = [spec_args[0], 10., spec_args[1]]
 
@@ -513,26 +640,28 @@ def simulate_lightcurves_emp(time, sampling, spec_shape, spec_args, ecdf,
             spec_args[1] = float(spec_args[1])
             spec_args[2] = float(spec_args[2])
         except:
-            print "Input error: When spec_shape is 'brokenpowerlaw', " \
+            print("Input error: When spec_shape is 'brokenpowerlaw', " \
                   "spec_args needs to be a list or tuple of three floats " \
-                  "(spectral index low, spectral index high, break frequency)!"
+                  "(spectral index low, spectral index high, break " \
+                  "frequency)!")
             return False
         spec_args = [spec_args[0], spec_args[1], 10., spec_args[2]]
 
     #---create light curve: TK algorithm---------------------------------------
     if feedback:
-        print 'Create long light curve of total time: %.1f.' % (time*nlcs)
+        print(f'Create long light curve of total time: {time*nlcs:.1f}.')
 
     # simulate light curves:
-    lightcurves = simulate_lightcurves_tk(time, sampling, spec_shape,
-                                          spec_args, nlcs=nlcs, seed=seed)
+    lightcurves = simulate_lightcurves_tk(
+            time, sampling, spec_shape, spec_args, nlcs=nlcs, seed=seed)
 
     #---iterate through light curves-------------------------------------------
     for i in range(nlcs):
         # shell feedback:
         if feedback:
-            sys.stdout.write('\rAdjust amplitudes of short light curves: ' \
-                             '%i %%' % (i*100./nlcs))
+            sys.stdout.write(
+                    '\rAdjust amplitudes of short light curves: ' \
+                    '{0:.0f} %'.format(i*100./nlcs))
             sys.stdout.flush()
 
         # adjust amplitude PDF: EMP algorithm:
@@ -540,17 +669,35 @@ def simulate_lightcurves_emp(time, sampling, spec_shape, spec_args, ecdf,
                                                iterations=adjust_iter)
     else:
         if feedback:
-            print '\rAdjust amplitudes of short light curves: done.'
+            print('\rAdjust amplitudes of short light curves: done.')
 
     return lightcurves
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def resample(time, lightcurve, sampling, resample_n=1):
-    """TODO
+    """Resample a evenly binned light curve.
+
+    Parameters
+    ----------
+    time : np.ndarray
+        Time steps of the original light curve.
+    lightcurve : np.ndarray
+        Flux density of the original light curve.
+    sampling : float or np.ndarray
+        Provide a float to resample to even time steps, where the time interval
+        is given by this float. Provide the target times in a np.ndarray to
+        resample the original data to specific times.
+    resample_n : int, default: 1
+        If larger than 1 the light curve will be resampled multiple times with
+        different zero points.
+
+    Returns
+    -------
+    time_res : np.ndarray
+        The resampled time steps.
+    lc_res : np.ndarray
+    The resampled flux densities.
     """
 
     #---check input------------------------------------------------------------
@@ -558,33 +705,33 @@ def resample(time, lightcurve, sampling, resample_n=1):
     resample_n = 1 if resample_n<1 else int(resample_n)
 
     if resample_n>1 and not isinstance(sampling, float):
-        print "WARNING: Multiple resampling of a light curve only possible " \
-              "for even sampling. 'resample_n' in resample() set to 1."
+        print("WARNING: Multiple resampling of a light curve only possible " \
+              "for even sampling. 'resample_n' in resample() set to 1.")
         resample_n = 1
 
     elif resample_n>1 and len(shape)>1:
-        print "WARNING: Multiple light curves will each be resampled only " \
-              " once. 'resample_n' in resample() set to 1."
+        print("WARNING: Multiple light curves will each be resampled only " \
+              " once. 'resample_n' in resample() set to 1.")
         resample_n = 1
 
     #---even sampling----------------------------------------------------------
     if isinstance(sampling, float):
         # create new time steps:
-        N = int(floor((time[-1]-time[0]) /sampling))
+        N = int(floor((time[-1] - time[0]) / sampling))
         time_res = np.linspace(time[0], time[0]+sampling*N, N+1)
 
     #---uneven sampling--------------------------------------------------------
     elif isinstance(sampling, np.ndarray):
         # sampling interval is not within time interval:
         if sampling[-1]<time[0] or sampling[0]>time[-1]:
-            print "WARNING: New time steps are not within given time interval"\
-                  ". Cannot resample light curve. Aborted!"
+            print("WARNING: New time steps are not within given time interval"\
+                  ". Cannot resample light curve. Aborted!")
             return False
 
         # limit resampling time steps to within time (no extrapolation):
         if sampling[0]<time[0] or sampling[-1]>time[-1]:
             i = np.min(np.where(sampling>=time[0])[0])
-            j = np.max(np.where(sampling<=time[-1])[0]) +1
+            j = np.max(np.where(sampling<=time[-1])[0]) + 1
             time_res = sampling[i:j]
             del i, j
 
@@ -596,8 +743,8 @@ def resample(time, lightcurve, sampling, resample_n=1):
 
     #---invalid input----------------------------------------------------------
     else:
-        print "WARNING: type '%s' for input 'sampling' in resample() is " \
-              "invalid. Give float or np.1darray. Aborted!" % type(sampling)
+        print(f"WARNING: type '{type(sampling)}' for input 'sampling' in " \
+              "resample() is invalid. Give float or np.1darray. Aborted!")
         return False
 
     #---resample single light curve once---------------------------------------
@@ -625,10 +772,7 @@ def resample(time, lightcurve, sampling, resample_n=1):
 
     return time_res, lc_res
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def rebin(time, lightcurve, bins, bincenters=None, binlimits='lower'):
     """Bins and averages a light curve according to its time steps.
@@ -740,13 +884,33 @@ def rebin(time, lightcurve, bins, bincenters=None, binlimits='lower'):
 
     return lightcurve_binned
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def add_errors(lightcurve, errors):
-    """TODO
+    """Add Gaussian errors to a light curve.
+
+    Parameters
+    ----------
+    lightcurve : np.ndarray
+        The light curve(s).
+    errors : float or np.ndarray
+        If a float is given, random errors are drawn from a Gaussian
+        distribution with zero mean and a standard deviation given by this
+        float.
+        If a np.array is given that matches the input lightcurve in length,
+        the values are randomly shuffled. Then errors are drawn from a Gaussian
+        distribution with zero mean and the standard deviation corresponding to
+        each individual data point given by the shuffled values
+        If a np.array is given that does not match the input lightcurve in
+        length, random uncertainties are drawn from the ECDF of 'errors'. Then
+        errors are drawn from a Gaussian distribution with zero mean and the
+        standard deviation corresponding to each individual data point given by
+        random draws from the ECDF.
+
+    Returns
+    -------
+    np.ndarray
+        The input light curve plus randomly drawn errors.
     """
 
     shape = lightcurve.shape
@@ -778,23 +942,45 @@ def add_errors(lightcurve, errors):
 
     #---invalid input for errors-----------------------------------------------
     else:
-        print "WARNING: Data type '%s' for input variable 'errors' in " \
-              "add_errors() is not supported. Give float or np.1darray. " \
-              "Aborted!" % type(errors)
+        print(f"WARNING: Data type '{type(errors)}' for input variable " \
+              "'errors' in add_errors() is not supported. Give float or " \
+              "np.ndarray. Aborted!")
         return False
 
-    return lightcurve +errors
+    return lightcurve + errors
 
+#==============================================================================
 
-
-############################################################################### NOTE
+# TODO:
 # Note: Read Papadakis and Lawrence 1993 again. Bin standard deviation should
 # normalized by the number of data points in each bin. Bin center should be
 # geometric mean. Needs to be fixed!
 
-
 def smooth_pg(freq, pg, bins_per_order=10, interpolate=False, feedback=False):
-    """TODO
+    """Smooth periodogram.
+
+    Parameters
+    ----------
+    freq : np.ndarray
+        Frequencies of the periodogram.
+    pg : np.ndarray
+        Powers of the periodogram.
+    bins_per_order : int, default: 10
+        Number of bins per order of magnitude in the covered frequency space.
+    interpolate : bool, default: False
+        If True, linearly interpolate empty frequency bins. Otherwise, empty
+        frequency bins will contain np.nan.
+    feedback : bool, default: False
+        If True, print out information.
+
+    Returns
+    -------
+    freq_bin : np.ndarray
+        Center frequencies of the binned periodogram.
+    pg_bin : np.ndarray
+        Power of the binned periodogram.
+    pg_uncert : np.ndarray
+        Uncertainties of the power of the binned periodogram.
     """
 
     # set frequency bins:
@@ -813,8 +999,8 @@ def smooth_pg(freq, pg, bins_per_order=10, interpolate=False, feedback=False):
     freq_bin[0] *= np.nan
     freq_bin[1] = bins[:-1]
     freq_bin[2] = bins[1:]
-    pg_bin = np.zeros(len(bins)-1) *np.nan
-    pg_uncert = np.zeros(len(bins)-1) *np.nan
+    pg_bin = np.zeros(len(bins)-1) * np.nan
+    pg_uncert = np.zeros(len(bins)-1) * np.nan
 
     # average bins:
     bind = np.digitize(freq, bins)
@@ -844,14 +1030,11 @@ def smooth_pg(freq, pg, bins_per_order=10, interpolate=False, feedback=False):
                              +(log10(pg_bin[j]) \
                              -log10(pg_bin[i-1])) /(j-i+1))
             if feedback:
-                print 'Data point %i interpolated.' % (i+1)
+                print(f'Data point {i+1} interpolated.')
 
     return freq_bin, pg_bin, pg_uncert
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def estimate_periodogram(
         time, signal, split='interactive', split_limit=4,
@@ -939,9 +1122,9 @@ def estimate_periodogram(
         try:
             resample_rate = float(resample_rate)
         except ValueError:
-            print "WARNING: Invalid input for argument 'resample_rate'. " \
+            print("WARNING: Invalid input for argument 'resample_rate'. " \
                   "Either set to 'median', 'mean' or a float.\n" \
-                  "Function aborted!"
+                  "Function aborted!")
             return False
 
     if split_limit < 4:
@@ -965,8 +1148,9 @@ def estimate_periodogram(
         plt.close()
 
         # user input: split data or not:
-        split = raw_input("Split the data set at long observation gaps? " \
-                          "Type 'no' or a number: ")
+        split = input(
+                "Split the data set at long observation gaps? " \
+                "Type 'no' or a number: ")
         while True:
             try:
                 split = float(split)
@@ -976,8 +1160,9 @@ def estimate_periodogram(
                     split = False
                     break
                 else:
-                    split = raw_input("This was not a valid input. " \
-                                      "Please type 'no' or a number: ")
+                    split = input(
+                            "This was not a valid input. " \
+                            "Please type 'no' or a number: ")
 
     #---data splitting---------------------------------------------------------
     if split and split<=deltat_max:
@@ -997,23 +1182,24 @@ def estimate_periodogram(
         del split_ind
 
         if feedback:
-            print 'Data split into %i sets at observation gaps > %.2f.' \
-                  % (len(split_time), split)
+            print(f'Data split into {len(split_time)} sets at observation ' \
+                  f'gaps > {split:.2f}.')
             if nsplits!=len(split_time):
-                  print '%i observation periods had fewer than %i data ' \
-                        'points and are not included in the split data sets.' \
-                        % (nsplits-len(split_time),  split_limit)
+                  print(f'{nsplits-len(split_time)} observation periods had ' \
+                        f'fewer than {split_limit} data points and are not ' \
+                        'included in the split data sets.')
             for i in range(len(split_time)):
-                print '  Set %i time: %.1f - %.1f, total: %.1f' \
-                      % (i+1, split_time[i][0], split_time[i][-1],
-                         split_time[i][-1]-split_time[i][0])
+                print('  Set {0:d} time: {1:.1f} - {2:.1f}, total: {3:.1f}' \
+                      ''.format(
+                        i+1, split_time[i][0], split_time[i][-1],
+                        split_time[i][-1]-split_time[i][0]))
 
         nsplits = len(split_time)
 
         #---resample full data set---------------------------------------------
         if feedback:
-            print 'Resample full data set %i times at %.1f sampling:' \
-                  % (resample_n, deltat_max)
+            print(f'Resample full data set {resample_n} times at ' \
+                  f'{deltat_max:.1f} sampling:')
 
         resample_n = int(resample_n)
         res_full_timestep = deltat_max
@@ -1023,24 +1209,24 @@ def estimate_periodogram(
                                        resample_n=resample_n)
 
         if feedback:
-            print '  Done.'
+            print('  Done.')
 
         # if resampled data is too short, do not keep:
         if (resample_n==1 and len(res_full_signal)<split_limit) or \
                 (resample_n>1 and res_full_signal.shape[1]<split_limit):
             res_full_signal = None
             if feedback:
-                print 'NOTE: The total data set resampled at the largest gap '\
-                      'duration has fewer than %i data points. Low frequency '\
-                      'periodograms will not be included.' % split_limit
+                print('NOTE: The total data set resampled at the largest gap '\
+                      f'duration has fewer than {split_limit} data points. ' \
+                      'Low frequency periodograms will not be included.')
 
         #---resample split data sets-------------------------------------------
         if feedback and isinstance(resample_rate, str):
-            print 'Resample %i split data set %i times at %s sampling:' \
-                  % (nsplits, resample_split_n, resample_rate)
+            print(f'Resample {nsplits} split data set {resample_split_n} ' \
+                  f'times at {resample_rate} sampling:')
         elif feedback:
-            print 'Resample %i split data set %i times at %.1f sampling:' \
-                  % (nsplits, resample_split_n, resample_rate)
+            print(f'Resample {nsplits} split data set {resample_split_n} ' \
+                  f'times at {resample_rate:.1f} sampling:')
 
         res_split_timestep = []
         res_split_signal = []
@@ -1054,7 +1240,6 @@ def estimate_periodogram(
             else:
                 timestep = resample_rate
 
-
             __, res_signal = resample(split_time[i], split_signal[i], timestep,
                                       resample_n=resample_split_n)
 
@@ -1065,28 +1250,28 @@ def estimate_periodogram(
                 res_split_timestep.append(timestep)
                 res_split_signal.append(res_signal)
             elif feedback:
-                print 'The %i. split data set resampled has fewer than %i ' \
-                      'data points. Periodograms will not be included.' \
-                      % (i+1, split_limit)
+                print(f'The {i+1}. split data set resampled has fewer than ' \
+                      f'{split_limit} data points. Periodograms will not be ' \
+                     'included.')
 
             del timestep, res_signal
 
         nsplits = len(res_split_signal)
 
         if feedback:
-            print '  Done.'
+            print('  Done.')
 
     #---no data splitting------------------------------------------------------
     else:
         if split:
             split = False
-            print 'Critical gap time is not exceeded. No data splitting.'
+            print('Critical gap time is not exceeded. No data splitting.')
         if feedback and isinstance(resample_rate, str):
-            print 'Resample full data set %i times at %s sampling:' \
-                  % (resample_n, resample_rate)
+            print(f'Resample full data set {resample_n} times at ' \
+                  f'{resample_rate} sampling:')
         elif feedback:
-            print 'Resample full data set %i times at %.1f sampling:' \
-                  % (resample_n, resample_rate)
+            print(f'Resample full data set {resample_n} times at ' \
+                  '{resample_rate:.1f} sampling:')
 
         # set time step for resampling:
         if resample_rate=='median':
@@ -1096,11 +1281,11 @@ def estimate_periodogram(
         else:
             res_full_timestep = resample_rate
 
-        __, res_full_signal = resample(time, signal, res_full_timestep,
-                                       resample_n=resample_n)
+        __, res_full_signal = resample(
+                time, signal, res_full_timestep, resample_n=resample_n)
 
         if feedback:
-            print '  Done.'
+            print('  Done.')
 
     #---periodograms-----------------------------------------------------------
     # NOTE: to calculate the periodogram we use the scipy implementation
@@ -1110,24 +1295,26 @@ def estimate_periodogram(
     if feedback and split:
         pg_n = nsplits*resample_split_n
         pg_n = pg_n +resample_n if res_full_signal is not None else pg_n
-        print 'Calculate %i periodograms:' % pg_n
+        print(f'Calculate {pg_n} periodograms:')
         del pg_n
     elif feedback:
-        print 'Calculate %i periodograms:' % resample_n
+        print('Calculate {resample_n} periodograms:')
 
     frequencies = []
     periodograms = []
 
     # full data set:
     if res_full_signal is not None and resample_n==1:
-        freq, pg = periodogram(res_full_signal, fs=1./res_full_timestep,
-                               window='hann', detrend='linear')
+        freq, pg = periodogram(
+                res_full_signal, fs=1./res_full_timestep, window='hann',
+                detrend='linear')
         frequencies.append(freq[1:])
         periodograms.append(pg[1:])
     elif res_full_signal is not None:
         for i in range(resample_n):
-            freq, pg = periodogram(res_full_signal[i], fs=1./res_full_timestep,
-                                   window='hann', detrend='linear')
+            freq, pg = periodogram(
+                    res_full_signal[i], fs=1./res_full_timestep, window='hann',
+                    detrend='linear')
             frequencies.append(freq[1:])
             periodograms.append(pg[1:])
     del res_full_timestep, res_full_signal
@@ -1135,9 +1322,9 @@ def estimate_periodogram(
     # split data sets:
     if split and resample_split_n==1:
         for __ in range(nsplits):
-            freq, pg = periodogram(res_split_signal[0],
-                                   fs=1./res_split_timestep[0],
-                                   window='hann', detrend='linear')
+            freq, pg = periodogram(
+                    res_split_signal[0], fs=1./res_split_timestep[0],
+                    window='hann', detrend='linear')
             frequencies.append(freq[1:])
             periodograms.append(pg[1:])
             del res_split_timestep[0], res_split_signal[0]
@@ -1145,19 +1332,19 @@ def estimate_periodogram(
     elif split :
         for __ in range(nsplits):
             for i in range(resample_split_n):
-                freq, pg = periodogram(res_split_signal[0][i],
-                                       fs=1./res_split_timestep[0],
-                                       window='hann', detrend='linear')
+                freq, pg = periodogram(
+                        res_split_signal[0][i], fs=1./res_split_timestep[0],
+                        window='hann', detrend='linear')
                 frequencies.append(freq[1:])
                 periodograms.append(pg[1:])
             del res_split_timestep[0], res_split_signal[0]
 
     if feedback:
-        print '  Done.'
+        print('  Done.')
 
     #---average periodogram: bin periodograms----------------------------------
     if feedback:
-        print 'Calculate average periodogram:'
+        print('Calculate average periodogram:')
 
     frequencies_con = np.concatenate(frequencies)
     periodograms_con = np.concatenate(periodograms)
@@ -1167,8 +1354,7 @@ def estimate_periodogram(
         periodograms_all = []
         for i in range(len(frequencies)):
             periodograms_all.append(np.zeros(len(frequencies[i]),
-                                             dtype=[('freq', np.float64),
-                                                    ('power', np.float64)]))
+                    dtype=[('freq', np.float64), ('power', np.float64)]))
             periodograms_all[i]['freq'] = frequencies[i]
             periodograms_all[i]['power'] = periodograms[i]
     else:
@@ -1181,9 +1367,10 @@ def estimate_periodogram(
 
     # write result into structured array:
     periodogram_avg = np.zeros(
-            len(pg_bin), dtype=[('freq',np.float64), ('freqlo',np.float64),
-                                ('freqhi',np.float64), ('power',np.float64),
-                                ('uncert', np.float64)])
+            len(pg_bin), dtype=[
+                    ('freq',np.float64), ('freqlo',np.float64),
+                    ('freqhi',np.float64), ('power',np.float64),
+                    ('uncert', np.float64)])
     periodogram_avg['freq'] = freq_bin[0]
     periodogram_avg['freqlo'] = freq_bin[1]
     periodogram_avg['freqhi'] = freq_bin[2]
@@ -1191,7 +1378,7 @@ def estimate_periodogram(
     periodogram_avg['uncert'] = pg_uncert
 
     if feedback:
-        print '  Done.'
+        print('  Done.')
 
     # return average periodogram and optionally individual periodograms:
     if return_periodograms:
@@ -1199,23 +1386,20 @@ def estimate_periodogram(
     else:
         return periodogram_avg
 
+#==============================================================================
 
-
-###############################################################################
-
-
-def create_psd_db(dbfile, data_time, data_signal, data_err,
-                  ntime, sim_sampling, spec_shape='powerlaw',
-                  split='interactive', split_limit=4,
-                  resample_rate='median', resample_n=1, resample_split_n=1,
-                  bins_per_order=10, interpolate=False, scaling='pdf',
-                  time_bins=None):
+def create_psd_db(
+        dbfile, data_time, data_signal, data_err, ntime, sim_sampling,
+        spec_shape='powerlaw', split='interactive', split_limit=4,
+        resample_rate='median', resample_n=1, resample_split_n=1,
+        bins_per_order=10, interpolate=False, scaling='pdf',
+        time_bins=None):
     """Creates a data base file to store simulated power-law PSDs (power
     spectra densities) in. This data base includes general parameters,
     simulation parameters, the corresponding data light curve and PSD and
     (later-on) the simulated PSDs.
 
-    Parameters TODO
+    Parameters
     -----
     dbfile : string
         Filename of the database.
@@ -1279,17 +1463,17 @@ def create_psd_db(dbfile, data_time, data_signal, data_err,
 
     #---check input------------------------------------------------------------
     if spec_shape not in ['powerlaw', 'kneemodel', 'brokenpowerlaw']:
-        print "WARNING: spectral shape '%s' in create_psd_db() is not " \
-              "defined. Set to 'powerlaw', 'kneemodel' or 'brokenpowerlaw'. " \
-              "No data base file created!" % spec_shape
+        print(f"WARNING: spectral shape '{spec_shape}' in create_psd_db() is "\
+              "not defined. Set to 'powerlaw', 'kneemodel' or " \
+              "'brokenpowerlaw'. No data base file created!")
         return False
 
     #---check if file exists---------------------------------------------------
     if os.path.isfile(dbfile):
-        userio = raw_input('Data file %s already exists. Overwrite file ' \
-                           '(Y/N)? ' % dbfile)
-        if not userio in ('y', 'Y', 'yes', 'Yes', 'Make it so'):
-            print 'Existing file not overwritten.'
+        userio = input(
+                f'Data file {dbfile} already exists. Overwrite file (y/n)? ')
+        if not userio.lower() in ('y', 'yes', 'make it so!'):
+            print('Existing file not overwritten.')
             return False
 
     #---interactive data splitting---------------------------------------------
@@ -1308,8 +1492,9 @@ def create_psd_db(dbfile, data_time, data_signal, data_err,
         plt.show(block=False)
 
         # user input: split data or not:
-        split = raw_input("Split the data set at long observation gaps? " \
-                          "Type 'no' or a number: ")
+        split = input(
+                "Split the data set at long observation gaps? " \
+                "Type 'no' or a number: ")
         while True:
             try:
                 split = float(split)
@@ -1319,13 +1504,14 @@ def create_psd_db(dbfile, data_time, data_signal, data_err,
                     split = 0.
                     break
                 else:
-                    split = raw_input("This was not a valid input. " \
-                                      "Please type 'no' or a number: ")
+                    split = input(
+                            "This was not a valid input. " \
+                            "Please type 'no' or a number: ")
     plt.clf()
     plt.close()
 
     #---calculate data PSD-----------------------------------------------------
-    print 'Calculate data raw periodogram..'
+    print('Calculate data raw periodogram..')
     data_periodogram = estimate_periodogram(
             data_time, data_signal, split=split, resample_rate=resample_rate,
             resample_n=resample_n, resample_split_n=resample_split_n,
@@ -1438,17 +1624,15 @@ def create_psd_db(dbfile, data_time, data_signal, data_err,
                         'Simulation PSDs', expectedrows=ntime)
 
     # feedback:
-    print 'New data base file for simulated power-law PSDs: %s.' % dbfile
-    print h5file
+    print('New data base file for simulated power-law PSDs: {dbfile}.')
+    print(h5file)
     h5file.close()
 
+#==============================================================================
 
-
-################################################################################
-
-
-def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
-            freq=None):
+def run_sim(
+        dbfile, iterations, index=None, indexlo=None, indexhi=None,
+        freq=None):
     """Runs light curve simulations for given spectral model input parameters,
     estimates the power spectral densities (PSDs) and stores the PSDs in a
     given data base.
@@ -1478,8 +1662,8 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
     adjust_iter = 200   # set the number of iterations if EMP algorithm is used
 
     #---open data base file----------------------------------------------------
-    h5file = tb.open_file(dbfile, mode = 'a',
-                          title = 'Power-law PSD simulation data base')
+    h5file = tb.open_file(
+        dbfile, mode = 'a', title = 'Power-law PSD simulation data base')
     tb_par = h5file.root.psds.simpar
     tb_par_row = tb_par.row
     tb_scalepar = h5file.root.psds.scalepar
@@ -1492,8 +1676,8 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
     try:
         binning = h5file.root.psds.genpar[0]['binning']
     except:
-        print 'Note: this data base is an old one and does not allow binning' \
-              ' yet. It is used as non-binned data sets.'
+        print('Note: this data base is an old one and does not allow binning' \
+              ' yet. It is used as non-binned data sets.')
         binning = False
     split = h5file.root.psds.genpar[0]['split']
     resample_rate = h5file.root.psds.genpar[0]['resample_rate']
@@ -1506,30 +1690,30 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
         resample_rate = 'median'
     elif resample_rate < 0.:
         resample_rate = 'mean'
-    scaling = h5file.root.psds.genpar[0]['scaling']
-    spec_shape = h5file.root.psds.genpar[0]['spectrum']
+    scaling = h5file.root.psds.genpar[0]['scaling'].decode('utf-8')
+    spec_shape = h5file.root.psds.genpar[0]['spectrum'].decode('utf-8')
 
     #---check input------------------------------------------------------------
     if spec_shape=='powerlaw' and not isinstance(index, float):
-        print "WARNING: This data base is set to power-law spectrum. " \
+        print("WARNING: This data base is set to power-law spectrum. " \
               "Function parameter 'index' has to be a float. " \
-              "Simulation aborted!"
+              "Simulation aborted!")
         h5file.close()
         return False
 
     elif spec_shape=='kneemodel' and not \
             (isinstance(index, float) and isinstance(freq, float)):
-        print "WARNING: This data base is set to knee model spectum. " \
+        print("WARNING: This data base is set to knee model spectum. " \
               "Function parameters 'index' and 'freq' have to be floats. " \
-              "Simulation aborted!"
+              "Simulation aborted!")
         h5file.close()
         return False
 
     elif spec_shape=='brokenpowerlaw' and not (isinstance(indexlo, float) \
             and isinstance(indexhi, float) and isinstance(freq, float)):
-        print "WARNING: This data base is set to broken power-law spectum. " \
+        print("WARNING: This data base is set to broken power-law spectum. " \
               "Function parameters 'indexlo', 'indexhi' and 'freq' have to " \
-              "be floats. Simulation aborted!"
+              "be floats. Simulation aborted!")
         h5file.close()
         return False
 
@@ -1574,21 +1758,22 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
         simulations = int(iterations /ntime) +1
 
     # feedback:
-    print 'Number of simulations: ' \
-          '%i long lightcurves split into %i short light curves, ' \
-          'yielding %i PSDs.' \
-          % (simulations, ntime, simulations*ntime)
+    print('Number of simulations: ' \
+          f'{simulations} long lightcurves split into {ntime} short light ' \
+          f'curves, yielding {simulations*ntime} PSDs.')
 
     # feedback:
     sim_start = datetime.now()
-    print 'Start simulations on %s ...' % sim_start.strftime('%a %H:%M:%S')
+    print('Start simulations on {0:s} ...'.format(
+            sim_start.strftime('%a %H:%M:%S')))
     sys.stdout.flush()
 
     # iterate through light curve simulations:
     for i in range(simulations):
         # feedback:
-        sys.stdout.write('Simulate and analyse light curves %i-%i of %i.\n' \
-                         % (i*ntime+1, (i+1)*ntime, simulations*ntime))
+        sys.stdout.write(
+            f'Simulate and analyse light curves {i*ntime+1}-{(i+1)*ntime} ' \
+            f'of {simulations*ntime}.\n')
         sys.stdout.flush()
         sim_inter = datetime.now()
 
@@ -1616,13 +1801,14 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
                     [indexlo, indexhi, 10., freq], nlcs=ntime)
 
         else:
-            print "Something's wrong... this should not happen!"
+            print("Something's wrong... this should not happen!")
             break
 
         shape = lightcurves.shape
 
         # feedback:
-        sys.stdout.write(' done in %s.\n' % (str(datetime.now()-sim_inter)))
+        sys.stdout.write(' done in {0}.\n'.format(
+                datetime.now()-sim_inter))
         sys.stdout.flush()
         sim_inter = datetime.now()
 
@@ -1630,16 +1816,19 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
         if scaling=='pdf':
             for j in range(ntime):
                 # feedback:
-                sys.stdout.write('\r  Adjust PDFs of short light curves: ' \
-                                 '%i %%' % (j*100./ntime))
+                sys.stdout.write(
+                        '\r  Adjust PDFs of short light curves: ' \
+                        f'{j*100./ntime} %')
                 sys.stdout.flush()
 
                 # adjust amplitude PDF: EMP algorithm:
-                lightcurves[j] = adjust_lightcurve_pdf(lightcurves[j], ecdf,
-                                                       iterations=adjust_iter)
+                lightcurves[j] = adjust_lightcurve_pdf(
+                        lightcurves[j], ecdf, iterations=adjust_iter)
             # feedback:
-            sys.stdout.write('\r  Adjust PDFs of short light curves: ' \
-                             'done in %s.\n' % (str(datetime.now()-sim_inter)))
+            sys.stdout.write(
+                    '\r  Adjust PDFs of short light curves: done in ' \
+                    '{0}.\n'.format(
+                            datetime.now()-sim_inter))
             sys.stdout.flush()
 
             # factors needed for storage:
@@ -1656,11 +1845,12 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
             lightcurves /= np.repeat(factors, shape[1]).reshape(shape)
 
             # feedback:
-            sys.stdout.write(' done in %s.\n' % str(datetime.now()-sim_inter))
+            sys.stdout.write(' done in {0}.\n'.format(
+                datetime.now()-sim_inter))
             sys.stdout.flush()
 
             # adjust factors for storage:
-            factors = 10. /factors**2
+            factors = 10. / factors**2
 
         sim_inter = datetime.now()
 
@@ -1669,8 +1859,8 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
             sys.stdout.write('  Bin light curves..')
             sys.stdout.flush()
 
-            lightcurves = rebin(time_sim, lightcurves, bins,
-                                bincenters=time_data+bin0)
+            lightcurves = rebin(
+                    time_sim, lightcurves, bins, bincenters=time_data+bin0)
 
         else:
             sys.stdout.write('  Resample light curves..')
@@ -1678,7 +1868,7 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
 
             lightcurves = resample(time_sim, lightcurves, time_data)[1]
 
-        sys.stdout.write(' done in %s.\n' % str(datetime.now()-sim_inter))
+        sys.stdout.write(' done in {0}.\n'.format(datetime.now()-sim_inter))
         sys.stdout.flush()
         sim_inter = datetime.now()
 
@@ -1688,7 +1878,7 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
 
         lightcurves = add_errors(lightcurves, errors)
 
-        sys.stdout.write(' done in %s.\n' % str(datetime.now()-sim_inter))
+        sys.stdout.write(' done in {0}.\n'.format(datetime.now()-sim_inter))
         sys.stdout.flush()
         sim_inter = datetime.now()
 
@@ -1696,8 +1886,8 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
         # iterate through light curves:
         for j, lc in enumerate(lightcurves):
             # feedback:
-            sys.stdout.write('\r  Estimate periodograms: %i %%' \
-                             % ((i*ntime+j+1)*100. /simulations /ntime))
+            sys.stdout.write('\r  Estimate periodograms: {0:.1f} %'.format(
+                    (i*ntime+j+1)*100./simulations/ntime))
             sys.stdout.flush()
 
             # periodogram:
@@ -1717,28 +1907,25 @@ def run_sim(dbfile, iterations, index=None, indexlo=None, indexhi=None,
             tb_scalepar_row.append()
             tb_scalepar.flush()
 
-        sys.stdout.write('\r  Estimate periodograms: done in %s.\n' \
-                         % str(datetime.now()-sim_inter))
+        sys.stdout.write('\r  Estimate periodograms: done in {0}.\n'.format(
+                datetime.now()-sim_inter))
         sys.stdout.flush()
         sim_inter = datetime.now()
 
         del lightcurves
 
         # feedback:
-        print 'Total progress: %i %% done in %s.' \
-                % ((i+1)*100./simulations, str(datetime.now()-sim_start))
+        print('Total progress: {0:.0f} % done in {1}.'.format(
+                (i+1)*100./simulations, datetime.now()-sim_start))
 
     # feedback:
-    print '%i simulations done in %s.' \
-            % (ntime*simulations, str(datetime.now()-sim_start))
+    print('{0} simulations done in {1}.'.format(
+                ntime*simulations, datetime.now()-sim_start))
 
     # close data base file:
     h5file.close()
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def smooth(x, window_len=11, window='hanning'):
     """Smooth the data using a window with requested size.
@@ -1766,40 +1953,38 @@ def smooth(x, window_len=11, window='hanning'):
     """
 
     if x.ndim != 1:
-       raise ValueError, "smooth only accepts 1 dimension arrays."
+       raise ValueError("smooth only accepts 1 dimension arrays.")
 
     if x.size < window_len:
-       raise ValueError, "Input vector needs to be bigger than window size."
+       raise ValueError("Input vector needs to be bigger than window size.")
 
     if window_len<3:
        return x
 
     if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-       raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', " \
-               "'bartlett', 'blackman'"
+       raise ValueError("Window is on of 'flat', 'hanning', 'hamming', " \
+               "'bartlett', 'blackman'")
 
     if not window_len%2:
-        window_len = int(window_len) +1
+        window_len = int(window_len) + 1
 
     s = np.r_[x[window_len-1:0:-1], x, x[-1:-window_len:-1]]
 
     if window=='flat':
        w = np.ones(window_len,'d')
     else:
-       w = eval('np.'+window+'(window_len)')
+       w = eval(f'np.{window}(window_len)')
 
-    y = np.convolve(w /w.sum(), s, mode='valid')
+    y = np.convolve(w / w.sum(), s, mode='valid')
+    drop = window_len // 2
 
-    drop = window_len /2
     return y[drop:-drop]
 
+#==============================================================================
 
-
-###############################################################################
-
-
-def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
-                 sign_level=0.05, smooth_confint=False):
+def evaluate_sim(
+        dbfile, output_dir='', output_suffix='dbfile', sign_level=0.05,
+        smooth_confint=False):
     """Evaluates a data base of simulated power spectral densities. Results are
     saved in plots and a text file.
 
@@ -1823,10 +2008,10 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
     """
 
     #---access data base-------------------------------------------------------
-    print 'Access data base: %s' % dbfile
+    print(f'Access data base: {dbfile}')
 
-    h5file = tb.open_file(dbfile, mode = 'r',
-                          title = 'Power-law PSD simulation data base')
+    h5file = tb.open_file(
+            dbfile, mode = 'r', title = 'Power-law PSD simulation data base')
 
     lightcurve = h5file.root.lightcurve.lightcurve[:]
     frequencies = h5file.root.psds.frequencies[:]
@@ -1865,25 +2050,25 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
     elif resample_rate<-0.5:
         resample_rate = 'mean'
     else:
-        resample_rate = '%.2f' % resample_rate
+        resample_rate = f'{resample_rate:.2f}'
 
-    text = 'Data base file: %s\n' \
+    text = 'Data base file: {0:s}\n' \
            '--------------------------------------------------\n' \
            'Light curve:\n' \
-           'Total time: %.2f\n' \
-           'Split at gaps: %.2f\n' \
-           'Full data resampled %i times.\n' \
-           'Split data resampled %i times.\n' \
-           'Resample rate: %s\n' \
+           'Total time: {1:.2f}\n' \
+           'Split at gaps: {2:.2f}\n' \
+           'Full data resampled {3:d} times.\n' \
+           'Split data resampled {4:d} times.\n' \
+           'Resample rate: {5:s}\n' \
            '--------------------------------------------------\n' \
            'Light curve simulation:\n' \
-           'Total time: %.2f * %i\n' \
-           'Initial sampling rate: %.2f\n' \
+           'Total time: {6:.2f} * {7:.0f}\n' \
+           'Initial sampling rate: {8:.2f}\n' \
            '--------------------------------------------------\n' \
-           'Power spectral density: %s\n' \
-           'Amplitude scaling: %s\n' \
-           'Bins per order: %i\n\n' \
-            % (dbfile, genpar.cols.time[0], genpar.cols.split[0],
+           'Power spectral density: {9:s}\n' \
+           'Amplitude scaling: {10:s}\n' \
+           'Bins per order: {11:d}\n\n'.format(
+               dbfile, genpar.cols.time[0], genpar.cols.split[0],
                genpar.cols.resample_n[0], genpar.cols.resample_split_n[0],
                resample_rate, genpar.cols.time[0], genpar.cols.ntime[0],
                genpar.cols.sampling[0], genpar.cols.spectrum[0],
@@ -1892,24 +2077,24 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
     del resample_rate, text
 
     #---plot light curve-------------------------------------------------------
-    print 'Create figure: light curve..',
+    print('Create figure: light curve.. ', end='')
     sys.stdout.flush()
 
     fig, axes = plt.subplots(1)
     fig.suptitle('Observed lightcurve', fontsize=16.)
     axes.set_xlabel('time')
     axes.set_ylabel('signal')
-    axes.plot(lightcurve[0], lightcurve[1],
-              marker='o', linestyle=':', color='k')
-    plt.savefig('%s%s1_lightcurve.png' % (output_dir, output_suffix),
-                dpi=100)
+    axes.plot(
+            lightcurve[0], lightcurve[1], marker='o', linestyle=':', color='k')
+    plt.savefig(
+            f'{output_dir}{output_suffix}1_lightcurve.png', dpi=100)
     plt.clf()
     plt.close()
     del fig, axes
-    print 'done.'
+    print('done.')
 
     #---average models, chi square---------------------------------------------
-    print 'Calculate average models and calculate chi squares.. ',
+    print('Calculate average models and calculate chi squares.. ', end='')
     sys.stdout.flush()
 
     # set storage arrays:
@@ -1937,35 +2122,38 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
             chisqs_obs[i] = np.nansum(np.power(datapsd -simpsd_avg[i], 2) \
                     /simpsd_rms[i])
 
-    print 'done.'
+    print('done.')
 
     #---plot average model PSDs------------------------------------------------
-    print 'Create figure: average model PSDs..',
+    print('Create figure: average model PSDs.. ', end='')
     sys.stdout.flush()
 
     fig, axes = plt.subplots(1)
-    fig.suptitle('PSD results:\nObserved raw PSD and average model PSDs ' \
-                 '$\\beta=%.2f-%.2f$' % (indices[0], indices[-1]),
-                 fontsize=16.)
+    fig.suptitle(
+            'PSD results:\nObserved raw PSD and average model PSDs ' \
+            f'$\\beta={indices[0]:.2f}-{indices[-1]:.2f}$',
+            fontsize=16.)
     axes.set_xlabel('frequency')
     axes.set_ylabel('power')
     for i, index in enumerate(indices):
         color = cmap(i*1./(len(indices)-1))
-        axes.plot(frequencies, simpsd_avg[i],
-                  marker='o', ms=1., mfc=color, mec=color, color=color)
-    axes.plot(frequencies, datapsd,
-             marker='o', ms=2., linewidth=2, color='k',
-             label='obs.')
+        axes.plot(
+                frequencies, simpsd_avg[i], marker='o', ms=1., mfc=color,
+                mec=color, color=color)
+    axes.plot(
+            frequencies, datapsd, marker='o', ms=2., linewidth=2, color='k',
+            label='obs.')
     axes.legend(loc='best', ncol=4)
     axes.set_xscale('log')
     axes.set_yscale('log')
-    '''runtime error occurs here when log scale is chosen and NANs are included<------'''
-    plt.savefig('%s%s2_avgPSDs.png' % (output_dir, output_suffix),
-                dpi=100)
+    # NOTE: runtime error occurs here when log scale is chosen and NANs are
+    # included
+    plt.savefig(
+            f'{output_dir}{output_suffix}2_avgPSDs.png', dpi=100)
     plt.clf()
     plt.close()
     del fig, axes, frequencies
-    print 'done.'
+    print('done.')
 
     #---plot fitted model PSD amplitudes---------------------------------------
     # create legend entries only for a few spectral indices:
@@ -1973,7 +2161,7 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
     label = np.floor(np.linspace(0, nind-1, max_legendentries))
 
     if scaling=='std':
-        print 'Create figure: model amplitudes..',
+        print('Create figure: model amplitudes.. ', end='')
         sys.stdout.flush()
 
         fig, axes = plt.subplots(1)
@@ -1984,21 +2172,21 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
             # select simulations:
             sel = np.where(simpar.cols.index[:] == index)[0]
             # plot histogram:
-            axes.hist(scalepar.cols.amplitude[:][sel],
-                         range=(0, ceil(np.max(scalepar.cols.amplitude[:]))),
-                         bins=100,
-                         color=cmap(i*1./nind), alpha=0.5,
-                         label='$\\beta=%.2f$' % index if i in label else '')
+            axes.hist(
+                    scalepar.cols.amplitude[:][sel],
+                    range=(0, ceil(np.max(scalepar.cols.amplitude[:]))),
+                    bins=100, color=cmap(i*1./nind), alpha=0.5,
+                    label='$\\beta={0}$'.format(index if i in label else ''))
         axes.legend(loc='upper right', ncol=5)
-        plt.savefig('%s%s3_fitAmpl.png' % (output_dir, output_suffix),
-                    dpi=100)
+        plt.savefig(
+                f'{output_dir}{output_suffix}3_fitAmpl.png', dpi=100)
         plt.clf()
         plt.close()
         del fig, axes
-        print 'done.'
+        print('done.')
 
     #---minimize chi square----------------------------------------------------
-    print 'Minimize chi square.. ',
+    print('Minimize chi square.. ', end='')
     sys.stdout.flush()
 
     # select spectral indices with small chi square:
@@ -2013,8 +2201,9 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
     poly = {}
 
     # create x-values for polynomial evaluation:
-    x = np.linspace(indices[sel][0], indices[sel][-1],
-                    int((indices[sel][-1] -indices[sel][0]) *100))
+    x = np.linspace(
+            indices[sel][0], indices[sel][-1],
+            int((indices[sel][-1] -indices[sel][0]) *100))
 
     # iterate through polynomial orders:
     for poly_order in range(3, len(sel)-1):
@@ -2042,10 +2231,10 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
         min_chisq = min_chisq['former']
         poly = poly['former']
 
-    print 'done.'
+    print('done.')
 
     #---plot chi squares and polynomial fit------------------------------------
-    print 'Create figure: chi square fit..',
+    print('Create figure: chi square fit.. ', end='')
     sys.stdout.flush()
 
     fig, axes = plt.subplots(1)
@@ -2053,30 +2242,33 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
     axes.set_xlabel('spectral index $\\beta$')
     axes.set_ylabel('$\\chi^2_\\mathrm{obs}$')
     i = np.where(chisqs_obs<10.**sel_order*np.min(chisqs_obs))[0]
-    axes.plot(indices[i], chisqs_obs[i],
-              marker='o', linestyle='None', label='measured')
-    axes.plot(x, poly,
-              color='g', label='%i. order poly. fit' % poly_order)
+    axes.plot(
+            indices[i], chisqs_obs[i], marker='o', linestyle='None',
+            label='measured')
+    axes.plot(
+            x, poly, color='g', label=f'{poly_order}. order poly. fit')
     axes.axvline(best_index, color='g', linestyle=':')
     axes.axhline(min_chisq, color='g', linestyle=':')
     axlim = axes.axis()
-    axes.text(axlim[0]+0.01*(axlim[1] -axlim[0]), min_chisq,
-              '$\\chi^2_\\mathrm{min}=%.2f$' % min_chisq,
-              verticalalignment='bottom', fontsize=16.)
-    axes.text(best_index+0.01*(axlim[1] -axlim[0]),
-              axlim[2]+0.01*(axlim[3] -axlim[2]),
-              '$\\beta_\\mathrm{opt}=%.2f$' % best_index,
-              verticalalignment='bottom', fontsize=16.)
+    axes.text(
+            axlim[0]+0.01*(axlim[1] -axlim[0]), min_chisq,
+            f'$\\chi^2_\\mathrm{{min}}={min_chisq:.2f}$',
+            verticalalignment='bottom', fontsize=16.)
+    axes.text(
+            best_index+0.01*(axlim[1] -axlim[0]),
+            axlim[2]+0.01*(axlim[3] -axlim[2]),
+            f'$\\beta_\\mathrm{{opt}}={best_index:.2f}$',
+            verticalalignment='bottom', fontsize=16.)
     axes.legend(loc='best')
-    plt.savefig('%s%s4_chisq.png' % (output_dir, output_suffix),
-                dpi=100)
+    plt.savefig(
+            f'{output_dir}{output_suffix}4_chisq.png', dpi=100)
     plt.clf()
     plt.close()
     del fig, axes, i, sel_order, poly_order, x, poly, axlim
-    print 'done.'
+    print('done.')
 
     #---goodness-of-fit: p-value-----------------------------------------------
-    print 'Goodness-of-fit: determine p-value.. ',
+    print('Goodness-of-fit: determine p-value.. ', end='')
     sys.stdout.flush()
 
     sel = np.argmin(np.absolute(indices-best_index))
@@ -2097,16 +2289,18 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
     # calculate p-value:
     pvalue = len(np.where(chisqs_sim > min_chisq)[0]) *1. /shape[0]
 
-    print 'done.'
+    print('done.')
 
     #---plot sim chi square distribution---------------------------------------
-    print 'Create figure: chi square distribution..',
+    print('Create figure: chi square distribution.. ', end='')
     sys.stdout.flush()
 
     fig, axes = plt.subplots(1)
-    fig.suptitle('PSD results:\n$\\chi^2$ distribution at $\\beta=%.2f$ ' \
-                 '($\\beta_\\mathrm{opt}=%.2f$)' \
-                 % (bestmodel_index, best_index), fontsize=16.)
+    fig.suptitle(
+            'PSD results:\n$\\chi^2$ distribution at $\\beta={0:.2f}$ ' \
+            '($\\beta_\\mathrm{{opt}}={1:.2f}$)'.format(
+                    bestmodel_index, best_index),
+            fontsize=16.)
     axes.set_xlabel('$\\chi^2$')
     axes.set_ylabel('rel. count')
     axes.hist(chisqs_sim, bins=20, density=True,
@@ -2115,20 +2309,21 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
     axes.axvline(min_chisq,
                  color='r', lw=2.,
                  label='obs')
-    axes.text(0.84, 0.96, '$N=%i$\n$P(\\chi^2_\\mathrm{sim}>\\chi^2' \
-              '_\\mathrm{obs})=%.1f \\%%$' % (shape[0], pvalue*100.),
-              horizontalalignment='right', verticalalignment='top',
-              fontsize=16., transform=axes.transAxes)
+    axes.text(
+            0.84, 0.96, '$N={0}$\n$P(\\chi^2_\\mathrm{{sim}}>\\chi^2' \
+            '_\\mathrm{{obs}})={1:.1f} \\%$'.format(shape[0], pvalue*100.),
+            horizontalalignment='right', verticalalignment='top',
+            fontsize=16., transform=axes.transAxes)
     axes.legend(loc='best')
-    plt.savefig('%s%s5_p-value.png' % (output_dir, output_suffix),
-                dpi=100)
+    plt.savefig(
+            f'{output_dir}{output_suffix}5_p-value.png', dpi=100)
     plt.clf()
     plt.close()
     del fig, axes
-    print 'done.'
+    print('done.')
 
     #---confidence interval----------------------------------------------------
-    print 'Determine confidence interval for best spectral index.. ',
+    print('Determine confidence interval for best spectral index.. ', end='')
     sys.stdout.flush()
 
     # iterate though spectral indices:
@@ -2145,7 +2340,7 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
                 /np.tile(bestmodel_rms, shape[0]).reshape(shape), axis=1)
 
         # calculate p-value:
-        pvalues[i] = len(np.where(chisqs_sim > min_chisq)[0]) *1. /shape[0]
+        pvalues[i] = len(np.where(chisqs_sim > min_chisq)[0]) *1. / shape[0]
         del chisqs_sim
 
     # cubic spline fit to p-values over spectral indices after smoothing:
@@ -2180,16 +2375,17 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
         confint_hi = (x[i[-1]] +x[i[-1]+1]) /2.
     del i
 
-    print 'done.'
+    print('done.')
 
     #---plot chi squares and cubic spline fit----------------------------------
-    print 'Create figure: confidence interval..',
+    print('Create figure: confidence interval.. ', end='')
     sys.stdout.flush()
 
     fig, axes = plt.subplots(1)
-    fig.suptitle('PSD results:\nConfidence interval for $\\beta_' \
-                 '\\mathrm{opt}$ at significance level $\\alpha=%.2f\\,\\%%$' \
-                 % (sign_level *100.), fontsize=16.)
+    fig.suptitle(
+            'PSD results:\nConfidence interval for $\\beta_\\mathrm{opt}$ at '\
+            f'significance level $\\alpha={sign_level*100.:.2f}\\,\\%$',
+            fontsize=16.)
     axes.set_xlabel('spectral index $\\beta$')
     axes.set_ylabel('p-value')
     axes.plot(indices, pvalues,
@@ -2201,43 +2397,40 @@ def evaluate_sim(dbfile, output_dir='', output_suffix='dbfile',
     axes.axvline(confint_hi, linestyle=':', color='r',
                  label='Conf. int. limits')
     axes.legend(loc='best')
-    plt.savefig('%s%s6_confint.png' % (output_dir, output_suffix), dpi=100)
+    plt.savefig(f'{output_dir}{output_suffix}6_confint.png', dpi=100)
     plt.clf()
     plt.close()
     del fig, axes, x, y
-    print 'done.'
+    print('done.')
 
     #---write out results------------------------------------------------------
     text = '--------------------------------------------------\n' \
-           'Best index:           %.2f\n' \
-           'Min. chisq:           %.2f\n' \
-           'p-value:              %.2f\n' \
-           'Confidence interval\nat %.2f sign. level:  %.2f - %.2f\n\n'  \
-           '--------------------------------------------------\n' \
-           % (best_index, min_chisq, pvalue, sign_level, confint_lo,
-              confint_hi)
+           'Best index:           {0:2f}\n' \
+           'Min. chisq:           {1:.2f}\n' \
+           'p-value:              {2:.2f}\n' \
+           'Confidence interval\nat {3:.2f} sign. level:  {4:.2f} - {5:.2f}\n'\
+           '\n--------------------------------------------------\n'.format(
+           best_index, min_chisq, pvalue, sign_level, confint_lo, confint_hi)
     write_to.write(text)
     del text
 
     write_to.write('Spectral   obs.         p-value\n')
     write_to.write('index      chi sq.\n')
     for i, index in enumerate(indices):
-        write_to.write('%.2f       %.2E     %.2f\n' \
-                       % (index, chisqs_obs[i], pvalues[i]))
+        write_to.write('{0:.2f}       {1:.2e}     {2:.2f}\n'.format(
+                index, chisqs_obs[i], pvalues[i]))
 
-    print 'Results written to: %s\n' % resfile
+    print(f'Results written to: {resfile}\n')
 
     #---close open files-------------------------------------------------------
     h5file.close()
     write_to.close()
 
+#==============================================================================
 
-
-###############################################################################
-
-
-def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
-                     sign_level=0.05, smooth_confint=False):
+def test_reliability(
+        dbfile, output_dir='', output_suffix='dbfile', sign_level=0.05,
+        smooth_confint=False):
     """Tests the reliability of the simulation result. Each simulation is used
     as data input for the simulation evaluation. Derived optimal spectral
     indices, false negatives and confidence intervals are tested.
@@ -2262,10 +2455,10 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
     """
 
     #---access data base-------------------------------------------------------
-    print 'Access data base: %s' % dbfile
+    print(f'Access data base: {dbfile}')
 
-    h5file = tb.open_file(dbfile, mode = 'r',
-                          title = 'Power-law PSD simulation data base')
+    h5file = tb.open_file(
+            dbfile, mode='r', title='Power-law PSD simulation data base')
 
     frequencies = h5file.root.psds.frequencies[:]
     simpsd = h5file.root.psds.simpsd
@@ -2281,7 +2474,7 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
     #---create output directory and file---------------------------------------
     # create directory if necessary:
     if len(output_dir)>0 and output_dir[-1]!='/':
-        output_dir = '%s/' % output_dir
+        output_dir = f'{output_dir}/'
     create_file_dir(output_dir)
 
     # create text file:
@@ -2291,8 +2484,8 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
         except:
             i = len(dbfile)
         i = len(dbfile) -i
-        output_suffix = '%s_' % dbfile[i:-3]
-        resfile = '%s%s%s' % (output_dir, output_suffix, 'reliability.txt')
+        output_suffix = f'{dbfile[i:-3]}_'
+        resfile = f'{output_dir}{output_suffix}reliability.txt'
     write_to = open(resfile, 'w')
 
     #---write general information to results file------------------------------
@@ -2302,34 +2495,34 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
     elif resample_rate<-0.5:
         resample_rate = 'mean'
     else:
-        resample_rate = '%.2f' % resample_rate
+        resample_rate = f'{resample_rate:.2f}'
 
-    text = 'Data base file: %s\n' \
+    text = 'Data base file: {0}\n' \
            '--------------------------------------------------\n' \
            'Light curve:\n' \
-           'Total time: %.2f\n' \
-           'Split at gaps: %.2f\n' \
-           'Full data resampled %i times.\n' \
-           'Split data resampled %i times.\n' \
-           'Resample rate: %s\n' \
+           'Total time: {1:.2f}\n' \
+           'Split at gaps: {2:.2f}\n' \
+           'Full data resampled {3} times.\n' \
+           'Split data resampled {4} times.\n' \
+           'Resample rate: {5}\n' \
            '--------------------------------------------------\n' \
            'Light curve simulation:\n' \
-           'Total time: %.2f * %i\n' \
-           'Initial sampling rate: %.2f\n' \
+           'Total time: {6:.2f} * {7}\n' \
+           'Initial sampling rate: {8:.2f}\n' \
            '--------------------------------------------------\n' \
-           'Power spectral density: %s\n' \
-           'Amplitude scaling: %s\n' \
-           'Bins per order: %i\n\n' \
-            % (dbfile, genpar.cols.time[0], genpar.cols.split[0],
-               genpar.cols.resample_n[0], genpar.cols.resample_split_n[0],
-               resample_rate, genpar.cols.time[0], genpar.cols.ntime[0],
-               genpar.cols.sampling[0], genpar.cols.spectrum[0],
-               genpar.cols.scaling[0], genpar.cols.bins_per_order[0])
+           'Power spectral density: {9}\n' \
+           'Amplitude scaling: {10}\n' \
+           'Bins per order: {11}\n\n'.format(
+            dbfile, genpar.cols.time[0], genpar.cols.split[0],
+            genpar.cols.resample_n[0], genpar.cols.resample_split_n[0],
+            resample_rate, genpar.cols.time[0], genpar.cols.ntime[0],
+            genpar.cols.sampling[0], genpar.cols.spectrum[0],
+            genpar.cols.scaling[0], genpar.cols.bins_per_order[0])
     write_to.write(text)
     del resample_rate, text
 
     #---calculate average models-----------------------------------------------
-    print 'Calculate average models.. ',
+    print('Calculate average models.. ', end='')
     sys.stdout.flush()
 
     # set storage arrays/lists:
@@ -2353,7 +2546,7 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
 
     del sel, shape
 
-    print 'done.'
+    print('done.')
 
     #---calculate and minimize chi squares-------------------------------------
     # set storage arrays:
@@ -2364,8 +2557,8 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
 
     # iterate through simulations:
     for i, psd in enumerate(simpsd[:]):
-        sys.stdout.write('\rCalculate and minimize chi squares.. %i%%' \
-                         % (i*100./nsim))
+        sys.stdout.write(
+                f'\rCalculate and minimize chi squares.. {i*100./nsim:.0f} %')
         sys.stdout.flush()
 
         #---calculate chi sqare------------------------------------------------
@@ -2376,8 +2569,8 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
         #---minimize chi square------------------------------------------------
         # select spectral indices with small chi square:
         for sel_order in range(1, 10):
-            sel = np.where(chisqs_obs[i,:]<=10.**sel_order \
-                           *np.min(chisqs_obs[i,:]))[0]
+            sel = np.where(
+                    chisqs_obs[i,:]<=10.**sel_order*np.min(chisqs_obs[i,:]))[0]
             if len(sel)>4:
                 break
 
@@ -2416,7 +2609,7 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
 
     del x, poly, poly_order, sel_order, best_index, min_chisq
 
-    print '\rCalculate and minimize chi squares.. done.'
+    print('\rCalculate and minimize chi squares.. done.')
 
     #---calculate p-values and confidence intervals----------------------------
     # set storage arrays:
@@ -2429,8 +2622,8 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
 
     # iterate through simulations:
     for i, chisq in enumerate(min_chisqs):
-        sys.stdout.write('\rp-values and confidence intervals.. %i%%' \
-                         % (i*100./nsim))
+        sys.stdout.write(
+                f'\rp-values and confidence intervals.. {i*100./nsim:.0f} %')
         sys.stdout.flush()
 
         #---calculate p-values-------------------------------------------------
@@ -2487,7 +2680,7 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
     # calculate rates of false negatives per spectral index:
     rate_falseneg = np.zeros(nind)
     for i, sel in enumerate(selections):
-        rate_falseneg[i] = np.sum(rejection[sel]) /float(len(sel))
+        rate_falseneg[i] = np.sum(rejection[sel]) / float(len(sel))
 
     # calculate rates of in/out of confidence interval per spectral index:
     confint_in = np.zeros(nind)
@@ -2495,12 +2688,12 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
     confint_unk = np.zeros(nind)
     for i, sel in enumerate(selections):
         norm = float(len(sel))
-        confint_in[i] = len(np.where(confidence[sel]==1)[0]) /norm
-        confint_out[i] = len(np.where(confidence[sel]==0)[0]) /norm
-        confint_unk[i] = len(np.where(np.isnan(confidence[sel]))[0]) /norm
+        confint_in[i] = len(np.where(confidence[sel]==1)[0]) / norm
+        confint_out[i] = len(np.where(confidence[sel]==0)[0]) / norm
+        confint_unk[i] = len(np.where(np.isnan(confidence[sel]))[0]) / norm
     del norm
 
-    print '\rp-values and confidence intervals.. done.'
+    print('\rp-values and confidence intervals.. done.')
 
     #---plot: deviation from intrinsic value-----------------------------------
     # select only a few spectral indices to plot:
@@ -2509,7 +2702,7 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
     plot = np.floor(np.linspace(0, nind, nplots)).astype(int)
     subselections = [selections[i] for i in range(nind) if i in plot]
 
-    print 'Create figure: accuracy..',
+    print('Create figure: accuracy.. ', end='')
     sys.stdout.flush()
 
     accuracy = simpar.cols.index[:] -best_indices
@@ -2519,7 +2712,8 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
     axes = []
 
     for i, sel in enumerate(subselections):
-        sys.stdout.write('\rCreate figure: accuracy.. %i%%' % (i*100./nplots))
+        sys.stdout.write(
+                f'\rCreate figure: accuracy.. {i*100./nplots:.0f} %')
         sys.stdout.flush()
 
         axes.append(plt.subplot(grid[i]))
@@ -2527,33 +2721,37 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
         lolim = int(floor(np.min(accuracy)))
         uplim = int(ceil(np.max(accuracy)))
         ks = kstest(accuracy[sel]-np.mean(accuracy[sel]), 'norm')[1]
-        axes[i].hist(accuracy[sel],
-                     range=(lolim-0.05, uplim+0.05), bins=10*(uplim-lolim)+1,
-                     color=cmap(i*1./nplots), alpha=0.5,
-                     label='$\\beta=%.2f$' % indices[plot[i]])
-        axes[i].text(0.97, 0.7, 'median:  %.2f\n  mean:  %.2f\n   std.:  ' \
-                     '%.2f\n     KS: %.2f' \
-                     % (np.median(accuracy[sel]), np.mean(accuracy[sel]),
-                        np.std(accuracy[sel]), ks), fontsize=16.,
-                     horizontalalignment='right', verticalalignment='top',
-                     transform=axes[i].transAxes)
+        axes[i].hist(
+                accuracy[sel],
+                range=(lolim-0.05, uplim+0.05), bins=10*(uplim-lolim)+1,
+                color=cmap(i*1./nplots), alpha=0.5,
+                label=f'$\\beta={indices[plot[i]]:.2f}$')
+        axes[i].text(
+                0.97, 0.7, 'median:  {0:.2f}\n  mean:  {1:.2f}\n   std.:  ' \
+                '{2:.2f}\n     KS: {3:.2f}'.format(
+                    np.median(accuracy[sel]), np.mean(accuracy[sel]),
+                    np.std(accuracy[sel]), ks),
+                fontsize=16.,
+                horizontalalignment='right', verticalalignment='top',
+                transform=axes[i].transAxes)
         axes[i].legend(loc='upper right')
-    print '\rCreate figure: accuracy.. almost done..',
+    print('\rCreate figure: accuracy.. almost done.. ', end='')
     sys.stdout.flush()
 
-    axes[0].set_title('PSD reliability:\nspectral index accuracy',
-                       fontsize=16.)
+    axes[0].set_title(
+            'PSD reliability:\nspectral index accuracy', fontsize=16.)
     axes[-1].set_xlabel('$\\beta_\\mathrm{intr}-\\beta_\\mathrm{obs}$')
 
-    plt.savefig('%s%s7_accuracy.png' % (output_dir, output_suffix),
-                dpi=100, bbox_inches='tight')
+    plt.savefig(
+            f'{output_dir}{output_suffix}7_accuracy.png', dpi=100,
+            bbox_inches='tight')
     plt.clf()
     plt.close()
     del fig, axes, lolim, uplim, ks
-    print '\rCreate figure: accuracy.. done.        '
+    print('\rCreate figure: accuracy.. done.        ')
 
     #---plot: rate of false negatives------------------------------------------
-    print 'Create figure: false negatives..',
+    print('Create figure: false negatives.. ', end='')
     sys.stdout.flush()
 
     fig, axes = plt.subplots(1)
@@ -2565,24 +2763,27 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
     axes.set_xlim(np.min(indices)-0.1, np.max(indices)+0.1)
     for ind, fnr in zip(indices, rate_falseneg):
         axes.axvline(ind, ymax=fnr*100./ymax, color='k', linewidth=1.)
-        axes.text(ind, fnr*100, '%.1f %%' % (fnr*100),
-                  horizontalalignment='center', verticalalignment='bottom',
-                  fontsize=6.)
+        axes.text(
+                ind, fnr*100, '%.1f %%' % (fnr*100),
+                horizontalalignment='center', verticalalignment='bottom',
+                fontsize=6.)
     #plt.plot(indices, rate_falseneg*100, linestyle='None', marker='o')
-    plt.savefig('%s%s8_falseneg.png' % (output_dir, output_suffix),
-                dpi=100, bbox_inches='tight')
+    plt.savefig(
+            f'{output_dir}{output_suffix}8_falseneg.png', dpi=100,
+            bbox_inches='tight')
     plt.clf()
     plt.close()
     del fig, axes
-    print 'done.'
+    print('done.')
 
     #---plot: confidence intervals---------------------------------------------
-    print 'Create figure: confidence intervals..',
+    print('Create figure: confidence intervals.. ', end='')
     sys.stdout.flush()
 
     fig, axes = plt.subplots(1)
-    fig.suptitle('PSD reliability:\n$\\beta_\\mathrm{intr}$ in confidence ' \
-                 'interval at significance level $\\alpha=%.2f$' % sign_level)
+    fig.suptitle(
+            'PSD reliability:\n$\\beta_\\mathrm{intr}$ in confidence ' \
+            f'interval at significance level $\\alpha={sign_level:.2f}$')
     axes.set_xlabel('$\\beta_\\mathrm{intr}$')
     axes.set_ylabel('rates')
     axes.set_xlim(np.min(indices)-0.1, np.max(indices)+0.1)
@@ -2599,7 +2800,7 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
     plt.clf()
     plt.close()
     del fig, axes
-    print 'done.'
+    print('done.')
 
     #---write out results------------------------------------------------------
     text = '--------------------------------------------------\n' \
@@ -2613,23 +2814,21 @@ def test_reliability(dbfile, output_dir='', output_suffix='dbfile',
         acc_med = np.median(accuracy[selections[i]])
         acc_mean = np.mean(accuracy[selections[i]])
         acc_std = np.std(accuracy[selections[i]])
-        text = '%.2f        %+.2f        %+.2f        %.2f         %.2f      '\
-               '    %.2f    %.2f    %.2f\n' \
-               % (index, acc_med, acc_mean, acc_std, rate_falseneg[i],
-                  confint_in[i], confint_out[i], confint_unk[i])
+        text = '{0:.2f}        {1:+.2f}        {2:+.2f}        {3:.2f} ' \
+               '         {4:.2f}          {5:.2f}    {6:.2f}    {7:.2f}\n' \
+               ''.format(
+                   index, acc_med, acc_mean, acc_std, rate_falseneg[i],
+                   confint_in[i], confint_out[i], confint_unk[i])
         write_to.write(text)
     del text
 
-    print 'Results written to: %s\n' % resfile
+    print(f'Results written to: {resfile}\n')
 
     #---close open files-------------------------------------------------------
     h5file.close()
     write_to.close()
 
-
-
-###############################################################################
-
+#==============================================================================
 
 def dbinfo(dbfile, details=None):
     """Prints information about the simulations stored in a PSD data base file.
@@ -2646,26 +2845,26 @@ def dbinfo(dbfile, details=None):
     """
 
     #---access data base-------------------------------------------------------
-    print 'Data base file: %s' % dbfile
+    print(f'Data base file: {dbfile}')
 
-    h5file = tb.open_file(dbfile, mode = 'r',
-                          title = 'Power-law PSD simulation data base')
+    h5file = tb.open_file(
+            dbfile, mode = 'r', title = 'Power-law PSD simulation data base')
 
     simpar = h5file.root.psds.simpar
     indices = np.sort(np.unique(simpar.cols.index[:]))
 
-    print '%i spectral indices tested.' % len(indices)
+    print(f'{len(indices)} spectral indices tested.')
 
     if details=='all':
-        print 'Spectral    Number of'
-        print 'index:      simulations:'
+        print('Spectral    Number of')
+        print('index:      simulations:')
 
         for index in indices:
-            nsim = len(np.where(simpar.cols.index[:]==index)[0])
-            print '%.2f        %i' % (index, nsim)
+            n_sim = len(np.where(simpar.cols.index[:]==index)[0])
+            print(f'{index:.2f}        {n_sim}')
 
-    print 'Total number of simulations: %i.\n' % len(simpar.cols.index)
+    print(f'Total number of simulations: {len(simpar.cols.index)}.\n')
 
     h5file.close()
 
-
+#==============================================================================
