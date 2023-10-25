@@ -951,11 +951,6 @@ def add_errors(lightcurve, errors):
 
 #==============================================================================
 
-# TODO:
-# Note: Read Papadakis and Lawrence 1993 again. Bin standard deviation should
-# normalized by the number of data points in each bin. Bin center should be
-# geometric mean. Needs to be fixed!
-
 def smooth_pg(freq, pg, bins_per_order=10, interpolate=False, feedback=False):
     """Smooth periodogram.
 
@@ -1007,7 +1002,7 @@ def smooth_pg(freq, pg, bins_per_order=10, interpolate=False, feedback=False):
     for i in range(len(bins)-1):
         sel = np.where(bind==i+1)[0]
         if len(sel)>0:
-            freq_bin[0,i] = np.mean(freq[sel])
+            freq_bin[0,i] = np.exp(np.mean(np.log(freq[sel])))
             pg_bin[i] = np.power(10, np.mean(np.log10(pg[sel])))
             pg_uncert[i] = np.power(10, np.std(np.log10(pg[sel])))
 
