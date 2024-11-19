@@ -27,7 +27,7 @@ __author__ = "Sebastian Kiehlmann"
 __copyright__ = "Copyright 2023, Sebastian Kiehlmann"
 __credits__ = ["Sebastian Kiehlmann"]
 __license__ = "BSD 3"
-__version__ = "4.0"
+__version__ = "4.1"
 __maintainer__ = "Sebastian Kiehlmann"
 __email__ = "skiehlmann@mail.de"
 __status__ = "Production"
@@ -350,7 +350,7 @@ def simulate_lightcurves_tk(
 
 #==============================================================================
 
-def adjust_lightcurve_pdf(lightcurve, ecdf, iterations=100, feedback=False):
+def adjust_lightcurve_pdf(lightcurve, ecdf, iterations=100, verbose=0):
     """Interatively adjust a simulated red noise light curve to match a target
     probability density function (PDF).
 
@@ -362,8 +362,8 @@ def adjust_lightcurve_pdf(lightcurve, ecdf, iterations=100, feedback=False):
         Target ECDF as an empirical description of the target PDF.
     iterations : int, default: 100
         Number of iterations.
-    feedback : bool, default: False
-        Print out information if True.
+    verbose : int, default=0
+        Controls the amount of information printed.
 
     Returns
     -------
@@ -408,13 +408,13 @@ def adjust_lightcurve_pdf(lightcurve, ecdf, iterations=100, feedback=False):
         lc_adj[a] = lc_sim[s]
 
         if np.max(np.absolute(lc_adj - lc_sim) / lc_sim) < 0.01:
-            if feedback:
+            if verbose:
                 print(f'Convergence reached after {i+1} iterations.')
             break
         else:
             lc_sim = lc_adj
     else:
-        if feedback:
+        if verbose:
             print(f'No convergence reached within {iterations} iterations.')
 
     return lc_sim
@@ -564,7 +564,7 @@ def simulate_lightcurve_emp(
 
 def simulate_lightcurves_emp(
         time, sampling, spec_shape, spec_args, ecdf, nlcs=1, adjust_iter=100,
-        feedback=False, seed=False):
+        verbose=0, seed=False):
     """Simulate multiple light curves with the Emmanoulpopoulous et al.
     algorithm.
 
@@ -585,8 +585,8 @@ def simulate_lightcurves_emp(
         Number of light curves to be simulated.
     adjust_iter : int, default: 100
         Number of iterations for the Emmanoulopoulos et al. algorithm.
-    feedback : bool, default: False
-        Print out information if True.
+    verbose : int, default=0
+        Controls the amount of information printed.
     seed : bool, default:False
         Sets a seed for the random generator to get a reproducable result.
         For testing only.
@@ -648,7 +648,7 @@ def simulate_lightcurves_emp(
         spec_args = [spec_args[0], spec_args[1], 10., spec_args[2]]
 
     #---create light curve: TK algorithm---------------------------------------
-    if feedback:
+    if verbose:
         print(f'Create long light curve of total time: {time*nlcs:.1f}.')
 
     # simulate light curves:
@@ -658,7 +658,7 @@ def simulate_lightcurves_emp(
     #---iterate through light curves-------------------------------------------
     for i in range(nlcs):
         # shell feedback:
-        if feedback:
+        if verbose:
             sys.stdout.write(
                     '\rAdjust amplitudes of short light curves: ' \
                     '{0:.0f} %'.format(i*100./nlcs))
@@ -668,7 +668,7 @@ def simulate_lightcurves_emp(
         lightcurves[i] = adjust_lightcurve_pdf(lightcurves[i], ecdf,
                                                iterations=adjust_iter)
     else:
-        if feedback:
+        if verbose:
             print('\rAdjust amplitudes of short light curves: done.')
 
     return lightcurves
@@ -951,7 +951,7 @@ def add_errors(lightcurve, errors):
 
 #==============================================================================
 
-def smooth_pg(freq, pg, bins_per_order=10, interpolate=False, feedback=False):
+def smooth_pg(freq, pg, bins_per_order=10, interpolate=False, verbose=0):
     """Smooth periodogram.
 
     Parameters
@@ -965,8 +965,8 @@ def smooth_pg(freq, pg, bins_per_order=10, interpolate=False, feedback=False):
     interpolate : bool, default: False
         If True, linearly interpolate empty frequency bins. Otherwise, empty
         frequency bins will contain np.nan.
-    feedback : bool, default: False
-        If True, print out information.
+    verbose : int, default=0
+        Controls the amount of information printed.
 
     Returns
     -------
@@ -1024,7 +1024,7 @@ def smooth_pg(freq, pg, bins_per_order=10, interpolate=False, feedback=False):
             pg_bin[i] = 10**(log10(pg_bin[i-1]) \
                              +(log10(pg_bin[j]) \
                              -log10(pg_bin[i-1])) /(j-i+1))
-            if feedback:
+            if verbose:
                 print(f'Data point {i+1} interpolated.')
 
     return freq_bin, pg_bin, pg_uncert
@@ -1035,8 +1035,8 @@ def estimate_periodogram(
         time, signal, split='interactive', split_limit=4,
         resample_rate='median', resample_n=1, resample_split_n=1,
         bins_per_order=10, interpolate=False,
-        return_periodograms=False, feedback=False):
-    """Estimates the raw, frequency bined periodogram of an unevenly sampled
+        return_periodograms=False, verbose=0):
+    """Estimates the raw, frequency binned periodogram of an unevenly sampled
     light curve. The unevenly sampled input data is resampled at a sampling
     rate of choice. The data may be split at long observation gaps. Then a
     periodogram is calculated for every split data set and for the full data
@@ -1085,8 +1085,8 @@ def estimate_periodogram(
     return_periodograms : bool, default=False
         If 'True' all individual periodograms are returned in a list
         additionnally to the average periodogram.
-    feedback : bool, default=False
-        Turns on/off additional information printed out in the shell.
+    verbose : int, default=0
+        Controls the amount of information printed.
 
     Returns
     -----
@@ -1176,7 +1176,7 @@ def estimate_periodogram(
                 split_signal.append(signal[ind[0]:ind[1]])
         del split_ind
 
-        if feedback:
+        if verbose > 1:
             print(f'Data split into {len(split_time)} sets at observation ' \
                   f'gaps > {split:.2f}.')
             if nsplits!=len(split_time):
@@ -1192,7 +1192,7 @@ def estimate_periodogram(
         nsplits = len(split_time)
 
         #---resample full data set---------------------------------------------
-        if feedback:
+        if verbose > 1:
             print(f'Resample full data set {resample_n} times at ' \
                   f'{deltat_max:.1f} sampling:')
 
@@ -1203,23 +1203,23 @@ def estimate_periodogram(
         __, res_full_signal = resample(time, signal, res_full_timestep,
                                        resample_n=resample_n)
 
-        if feedback:
+        if verbose > 1:
             print('  Done.')
 
         # if resampled data is too short, do not keep:
         if (resample_n==1 and len(res_full_signal)<split_limit) or \
                 (resample_n>1 and res_full_signal.shape[1]<split_limit):
             res_full_signal = None
-            if feedback:
+            if verbose:
                 print('NOTE: The total data set resampled at the largest gap '\
                       f'duration has fewer than {split_limit} data points. ' \
                       'Low frequency periodograms will not be included.')
 
         #---resample split data sets-------------------------------------------
-        if feedback and isinstance(resample_rate, str):
+        if verbose > 1 and isinstance(resample_rate, str):
             print(f'Resample {nsplits} split data set {resample_split_n} ' \
                   f'times at {resample_rate} sampling:')
-        elif feedback:
+        elif verbose > 1:
             print(f'Resample {nsplits} split data set {resample_split_n} ' \
                   f'times at {resample_rate:.1f} sampling:')
 
@@ -1244,7 +1244,7 @@ def estimate_periodogram(
                         res_signal.shape[1]>=split_limit):
                 res_split_timestep.append(timestep)
                 res_split_signal.append(res_signal)
-            elif feedback:
+            elif verbose > 1:
                 print(f'The {i+1}. split data set resampled has fewer than ' \
                       f'{split_limit} data points. Periodograms will not be ' \
                      'included.')
@@ -1253,18 +1253,19 @@ def estimate_periodogram(
 
         nsplits = len(res_split_signal)
 
-        if feedback:
+        if verbose > 1:
             print('  Done.')
 
     #---no data splitting------------------------------------------------------
     else:
         if split:
             split = False
-            print('Critical gap time is not exceeded. No data splitting.')
-        if feedback and isinstance(resample_rate, str):
+            if verbose > 1:
+                print('Critical gap time is not exceeded. No data splitting.')
+        if verbose > 1 and isinstance(resample_rate, str):
             print(f'Resample full data set {resample_n} times at ' \
                   f'{resample_rate} sampling:')
-        elif feedback:
+        elif verbose > 1:
             print(f'Resample full data set {resample_n} times at ' \
                   '{resample_rate:.1f} sampling:')
 
@@ -1279,7 +1280,7 @@ def estimate_periodogram(
         __, res_full_signal = resample(
                 time, signal, res_full_timestep, resample_n=resample_n)
 
-        if feedback:
+        if verbose > 1:
             print('  Done.')
 
     #---periodograms-----------------------------------------------------------
@@ -1287,12 +1288,12 @@ def estimate_periodogram(
     # the signal is linearly de-trended to avoid aliasing contamination
     # and a Hann window function is applied.
 
-    if feedback and split:
+    if verbose and split:
         pg_n = nsplits*resample_split_n
         pg_n = pg_n +resample_n if res_full_signal is not None else pg_n
         print(f'Calculate {pg_n} periodograms:')
         del pg_n
-    elif feedback:
+    elif verbose > 1:
         print('Calculate {resample_n} periodograms:')
 
     frequencies = []
@@ -1334,11 +1335,11 @@ def estimate_periodogram(
                 periodograms.append(pg[1:])
             del res_split_timestep[0], res_split_signal[0]
 
-    if feedback:
+    if verbose > 1:
         print('  Done.')
 
     #---average periodogram: bin periodograms----------------------------------
-    if feedback:
+    if verbose > 1:
         print('Calculate average periodogram:')
 
     frequencies_con = np.concatenate(frequencies)
@@ -1358,7 +1359,7 @@ def estimate_periodogram(
     # calculate averaged periodogram:
     freq_bin, pg_bin, pg_uncert = smooth_pg(
             frequencies_con, periodograms_con, bins_per_order=bins_per_order,
-            interpolate=interpolate, feedback=feedback)
+            interpolate=interpolate, verbose=verbose)
 
     # write result into structured array:
     periodogram_avg = np.zeros(
@@ -1372,7 +1373,7 @@ def estimate_periodogram(
     periodogram_avg['power'] = pg_bin
     periodogram_avg['uncert'] = pg_uncert
 
-    if feedback:
+    if verbose > 1:
         print('  Done.')
 
     # return average periodogram and optionally individual periodograms:
@@ -1388,7 +1389,7 @@ def create_psd_db(
         spec_shape='powerlaw', split='interactive', split_limit=4,
         resample_rate='median', resample_n=1, resample_split_n=1,
         bins_per_order=10, interpolate=False, scaling='pdf',
-        time_bins=None):
+        time_bins=None, verbose=1):
     """Creates a data base file to store simulated power-law PSDs (power
     spectra densities) in. This data base includes general parameters,
     simulation parameters, the corresponding data light curve and PSD and
@@ -1454,6 +1455,8 @@ def create_psd_db(
         Averaging time intervals of the observed data. Stored in the data base.
         If set, then simulated light curves will not be interpolated to the
         observed time grid but averaged over the time bins.
+    verbose : int, default=1
+        Controls the amount of information printed.
     """
 
     #---check input------------------------------------------------------------
@@ -1506,12 +1509,14 @@ def create_psd_db(
     plt.close()
 
     #---calculate data PSD-----------------------------------------------------
-    print('Calculate data raw periodogram..')
+    if verbose > 1:
+        print('Calculate data raw periodogram..')
+
     data_periodogram = estimate_periodogram(
             data_time, data_signal, split=split, resample_rate=resample_rate,
             resample_n=resample_n, resample_split_n=resample_split_n,
             bins_per_order=bins_per_order, interpolate=interpolate,
-            split_limit=split_limit, feedback=True)
+            split_limit=split_limit, verbose=verbose)
     nfreq = len(data_periodogram)
 
     #---create data base file--------------------------------------------------
@@ -1619,15 +1624,19 @@ def create_psd_db(
                         'Simulation PSDs', expectedrows=ntime)
 
     # feedback:
-    print('New data base file for simulated power-law PSDs: {dbfile}.')
-    print(h5file)
+    if verbose > 0:
+        print(f'New data base file for simulated power-law PSDs: {dbfile}.')
+
+    if verbose > 1:
+        print(h5file)
+
     h5file.close()
 
 #==============================================================================
 
 def run_sim(
         dbfile, iterations, index=None, indexlo=None, indexhi=None,
-        freq=None):
+        freq=None, verbose=1):
     """Runs light curve simulations for given spectral model input parameters,
     estimates the power spectral densities (PSDs) and stores the PSDs in a
     given data base.
@@ -1651,6 +1660,8 @@ def run_sim(
         Turn over frequency at which the spectral model bends. Needs to be set
         if the data base is set to 'kneemodel' or 'brokenpowerlaw' spectral
         model.
+    verbose : int, default=1
+        Controls the amount of information printed.
     """
 
     # set simulation parameter:
@@ -1753,29 +1764,33 @@ def run_sim(
         simulations = int(iterations /ntime) +1
 
     # feedback:
-    print('Number of simulations: ' \
-          f'{simulations} long lightcurves split into {ntime} short light ' \
-          f'curves, yielding {simulations*ntime} PSDs.')
+    if verbose > 0:
+        print('Number of simulations: ' \
+            f'{simulations} long lightcurves split into {ntime} short light ' \
+            f'curves, yielding {simulations*ntime} PSDs.')
 
     # feedback:
-    sim_start = datetime.now()
-    print('Start simulations on {0:s} ...'.format(
-            sim_start.strftime('%a %H:%M:%S')))
-    sys.stdout.flush()
+    if verbose > 0:
+        sim_start = datetime.now()
+        print('Start simulations on {0:s} ...'.format(
+                sim_start.strftime('%a %H:%M:%S')))
+        sys.stdout.flush()
 
     # iterate through light curve simulations:
     for i in range(simulations):
         # feedback:
-        sys.stdout.write(
-            f'Simulate and analyse light curves {i*ntime+1}-{(i+1)*ntime} ' \
-            f'of {simulations*ntime}.\n')
-        sys.stdout.flush()
-        sim_inter = datetime.now()
+        if verbose > 1:
+            sys.stdout.write(
+                f'Simulate and analyse light curves {i*ntime+1}-{(i+1)*ntime} ' \
+                f'of {simulations*ntime}.\n')
+            sys.stdout.flush()
+            sim_inter = datetime.now()
 
         #---create light curves: TK algorithm----------------------------------
         # feedback:
-        sys.stdout.write('  Simulate long light curve..')
-        sys.stdout.flush()
+        if verbose > 1:
+            sys.stdout.write('  Simulate long light curve..')
+            sys.stdout.flush()
 
         # simulate light curve: power-law model:
         if spec_shape=='powerlaw':
@@ -1802,29 +1817,32 @@ def run_sim(
         shape = lightcurves.shape
 
         # feedback:
-        sys.stdout.write(' done in {0}.\n'.format(
-                datetime.now()-sim_inter))
-        sys.stdout.flush()
-        sim_inter = datetime.now()
+        if verbose > 1:
+            sys.stdout.write(' done in {0}.\n'.format(
+                    datetime.now()-sim_inter))
+            sys.stdout.flush()
+            sim_inter = datetime.now()
 
         #---match PDF: EMP algorithm-------------------------------------------
         if scaling=='pdf':
             for j in range(ntime):
                 # feedback:
-                sys.stdout.write(
-                        '\r  Adjust PDFs of short light curves: ' \
-                        f'{j*100./ntime} %')
-                sys.stdout.flush()
+                if verbose > 1:
+                    sys.stdout.write(
+                            '\r  Adjust PDFs of short light curves: ' \
+                            f'{j*100./ntime} %')
+                    sys.stdout.flush()
 
                 # adjust amplitude PDF: EMP algorithm:
                 lightcurves[j] = adjust_lightcurve_pdf(
                         lightcurves[j], ecdf, iterations=adjust_iter)
             # feedback:
-            sys.stdout.write(
-                    '\r  Adjust PDFs of short light curves: done in ' \
-                    '{0}.\n'.format(
-                            datetime.now()-sim_inter))
-            sys.stdout.flush()
+            if verbose > 1:
+                sys.stdout.write(
+                        '\r  Adjust PDFs of short light curves: done in ' \
+                        '{0}.\n'.format(
+                                datetime.now()-sim_inter))
+                sys.stdout.flush()
 
             # factors needed for storage:
             factors = np.zeros(shape[0])
@@ -1832,17 +1850,19 @@ def run_sim(
         #---match variance-----------------------------------------------------
         if scaling=='std':
             # feedback:
-            sys.stdout.write('  Adjust variances of short light curves..')
-            sys.stdout.flush()
+            if verbose > 1:
+                sys.stdout.write('  Adjust variances of short light curves..')
+                sys.stdout.flush()
 
             # match variances:
             factors = np.std(lightcurves, axis=1) /sqrt(variance)
             lightcurves /= np.repeat(factors, shape[1]).reshape(shape)
 
             # feedback:
-            sys.stdout.write(' done in {0}.\n'.format(
-                datetime.now()-sim_inter))
-            sys.stdout.flush()
+            if verbose > 1:
+                sys.stdout.write(' done in {0}.\n'.format(
+                    datetime.now()-sim_inter))
+                sys.stdout.flush()
 
             # adjust factors for storage:
             factors = 10. / factors**2
@@ -1851,39 +1871,45 @@ def run_sim(
 
         #---resample-----------------------------------------------------------
         if binning:
-            sys.stdout.write('  Bin light curves..')
-            sys.stdout.flush()
+            if verbose > 1:
+                sys.stdout.write('  Bin light curves..')
+                sys.stdout.flush()
 
             lightcurves = rebin(
                     time_sim, lightcurves, bins, bincenters=time_data+bin0)
 
         else:
-            sys.stdout.write('  Resample light curves..')
-            sys.stdout.flush()
+            if verbose > 1:
+                sys.stdout.write('  Resample light curves..')
+                sys.stdout.flush()
 
             lightcurves = resample(time_sim, lightcurves, time_data)[1]
 
-        sys.stdout.write(' done in {0}.\n'.format(datetime.now()-sim_inter))
-        sys.stdout.flush()
-        sim_inter = datetime.now()
+        if verbose > 1:
+            sys.stdout.write(' done in {0}.\n'.format(datetime.now()-sim_inter))
+            sys.stdout.flush()
+            sim_inter = datetime.now()
 
         #---simulate light curve errors----------------------------------------
-        sys.stdout.write('  Simulate observational errors..')
-        sys.stdout.flush()
+        if verbose > 1:
+            sys.stdout.write('  Simulate observational errors..')
+            sys.stdout.flush()
 
         lightcurves = add_errors(lightcurves, errors)
 
-        sys.stdout.write(' done in {0}.\n'.format(datetime.now()-sim_inter))
-        sys.stdout.flush()
-        sim_inter = datetime.now()
+        if verbose > 1:
+            sys.stdout.write(' done in {0}.\n'.format(datetime.now()-sim_inter))
+            sys.stdout.flush()
+            sim_inter = datetime.now()
 
         #---estimate periodograms----------------------------------------------
         # iterate through light curves:
         for j, lc in enumerate(lightcurves):
             # feedback:
-            sys.stdout.write('\r  Estimate periodograms: {0:.1f} %'.format(
-                    (i*ntime+j+1)*100./simulations/ntime))
-            sys.stdout.flush()
+            if verbose > 1:
+                sys.stdout.write('\r  Estimate periodograms: {0:.1f} %'.format(
+                        (i*ntime+j+1)*100./simulations/ntime))
+                sys.stdout.flush()
 
             # periodogram:
             psd = estimate_periodogram(
@@ -1902,20 +1928,23 @@ def run_sim(
             tb_scalepar_row.append()
             tb_scalepar.flush()
 
-        sys.stdout.write('\r  Estimate periodograms: done in {0}.\n'.format(
-                datetime.now()-sim_inter))
-        sys.stdout.flush()
-        sim_inter = datetime.now()
+        if verbose > 1:
+            sys.stdout.write('\r  Estimate periodograms: done in {0}.\n'.format(
+                    datetime.now()-sim_inter))
+            sys.stdout.flush()
+            sim_inter = datetime.now()
 
         del lightcurves
 
         # feedback:
-        print('Total progress: {0:.0f} % done in {1}.'.format(
-                (i+1)*100./simulations, datetime.now()-sim_start))
+        if verbose > 1:
+            print('Total progress: {0:.0f} % done in {1}.'.format(
+                    (i+1)*100./simulations, datetime.now()-sim_start))
 
     # feedback:
-    print('{0} simulations done in {1}.'.format(
-                ntime*simulations, datetime.now()-sim_start))
+    if verbose > 0:
+        print('{0} simulations done in {1}.'.format(
+                    ntime*simulations, datetime.now()-sim_start))
 
     # close data base file:
     h5file.close()
