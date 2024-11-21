@@ -1742,7 +1742,15 @@ def run_sim(
 
     # calculate data signal variance:
     elif scaling=='std':
-        variance = np.std(flux)**2 -np.mean(np.power(errors, 2))
+        variance = np.std(flux)**2
+        mean_err_var = np.mean(np.power(errors, 2))
+
+        if mean_err_var < variance:
+            variance -= mean_err_var
+        else:
+            # if variance is smaller than errors, let's assume half of the
+            # variance is intrinsic; because variance must not ne zero:
+            variance /= 2
 
     del flux
 
